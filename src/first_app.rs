@@ -1,7 +1,5 @@
 use crate::nre_window::NreWindow;
-use winit::event::{self, Event, WindowEvent};
-use winit::event_loop::ControlFlow;
-use winit::window::Window;
+use winit::event::{Event, WindowEvent};
 
 pub struct FirstApp {
     nre_window: NreWindow,
