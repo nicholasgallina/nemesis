@@ -1,6 +1,16 @@
 use ash::vk;
 use ash::Entry;
 
+pub struct QueueFamilyIndices {
+    pub graphics_family: Option<u32>,
+}
+
+impl QueueFamilyIndices {
+    pub fn is_complete(&self) -> bool {
+        self.graphics_family.is_some()
+    }
+}
+
 pub struct NreDevice {
     entry: Entry,
     instance: ash::Instance,
@@ -39,11 +49,36 @@ impl NreDevice {
 
         devices
             .into_iter()
-            .find(|device| Self::is_device_suitable(device))
+            .find(|device| Self::is_device_suitable(instance, device))
             .expect("no suitable GPU found")
     }
 
-    fn is_device_suitable(_device: &vk::PhysicalDevice) -> bool {
-        true
+    fn is_device_suitable(instance: &ash::Instance, device: &vk::PhysicalDevice) -> bool {
+        let indices = Self::find_queue_families(instance, device);
+        indices.is_complete()
     }
+
+    fn find_queue_families(
+        instance: &ash::Instance,
+        device: &vk::PhysicalDevice,
+    ) -> QueueFamilyIndices {
+        let queue_families =
+            unsafe { instance.get_physical_device_queue_family_properties(*device) };
+
+        let mut indices = QueueFamilyIndices {
+            graphics_family: None,
+        };
+
+        for (i, family) in queue_families.iter().enumerate() {
+            if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                indices.graphics_family = Some(i as u32);
+            }
+
+            if indices.is_complete() {
+                break;
+            }
+        }
+        indices
+    }
+    //
 }
