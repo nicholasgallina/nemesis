@@ -1,14 +1,20 @@
+use crate::nre_device::NreDevice;
 use crate::nre_window::NreWindow;
 use winit::event::{Event, WindowEvent};
 
 pub struct FirstApp {
     nre_window: NreWindow,
+    nre_device: NreDevice,
 }
 
 impl FirstApp {
     pub fn new() -> Self {
         let nre_window = NreWindow::new(800, 600, "Nemesis Rendering Engine");
-        Self { nre_window }
+        let nre_device = NreDevice::new();
+        Self {
+            nre_window,
+            nre_device,
+        }
     }
 
     pub fn run(self) {

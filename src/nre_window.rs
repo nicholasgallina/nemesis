@@ -13,7 +13,7 @@ impl NreWindow {
     pub fn new(width: u32, height: u32, name: &str) -> Self {
         let event_loop = EventLoop::new().unwrap();
         let window = WindowBuilder::new()
-            .with_title("Nemesis Rendering Engine")
+            .with_title("Nemesis")
             .with_inner_size(winit::dpi::LogicalSize::new(width, height))
             .with_resizable(false)
             .build(&event_loop)

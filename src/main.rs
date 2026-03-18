@@ -1,4 +1,5 @@
 mod first_app;
+mod nre_device;
 mod nre_window;
 
 use first_app::FirstApp;
