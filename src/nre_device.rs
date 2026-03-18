@@ -1,5 +1,7 @@
+use ash::fuchsia::external_memory;
 use ash::vk;
 use ash::Entry;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 pub struct QueueFamilyIndices {
     pub graphics_family: Option<u32>,
@@ -17,12 +19,15 @@ pub struct NreDevice {
     physical_device: vk::PhysicalDevice,
     device: ash::Device,
     graphics_queue: vk::Queue,
+    surface: vk::SurfaceKHR,
+    surface_loader: ash::khr::surface::Instance,
 }
 
 impl NreDevice {
-    pub fn new() -> Self {
+    pub fn new(window: &winit::window::Window) -> Self {
         let entry = unsafe { Entry::load().unwrap() };
-        let instance = Self::create_instance(&entry);
+        let instance = Self::create_instance(&entry, window);
+        let (surface, surface_loader) = Self::create_surface(&entry, &instance, window);
         let physical_device = Self::choose_physical_device(&instance);
         let (device, graphics_queue) = Self::create_logical_device(&instance, &physical_device);
 
@@ -32,10 +37,16 @@ impl NreDevice {
             physical_device,
             device,
             graphics_queue,
+            surface,
+            surface_loader,
         }
     }
 
-    fn create_instance(entry: &Entry) -> ash::Instance {
+    fn create_instance(entry: &Entry, window: &winit::window::Window) -> ash::Instance {
+        let extension_names =
+            ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
+                .unwrap();
+
         let app_info = vk::ApplicationInfo {
             api_version: vk::make_api_version(0, 1, 0, 0),
             ..Default::default()
@@ -43,6 +54,8 @@ impl NreDevice {
 
         let create_info = vk::InstanceCreateInfo {
             p_application_info: &app_info,
+            enabled_extension_count: extension_names.len() as u32,
+            pp_enabled_extension_names: extension_names.as_ptr(),
             ..Default::default()
         };
 
@@ -119,6 +132,25 @@ impl NreDevice {
             unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
 
         (device, graphics_queue)
+    }
+
+    fn create_surface(
+        entry: &Entry,
+        instance: &ash::Instance,
+        window: &winit::window::Window,
+    ) -> (vk::SurfaceKHR, ash::khr::surface::Instance) {
+        let surface = unsafe {
+            ash_window::create_surface(
+                entry,
+                instance,
+                window.display_handle().unwrap().as_raw(),
+                window.window_handle().unwrap().as_raw(),
+                None,
+            )
+            .unwrap()
+        };
+        let surface_loader = ash::khr::surface::Instance::new(entry, instance);
+        (surface, surface_loader)
     }
     //
 }

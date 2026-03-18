@@ -10,7 +10,7 @@ pub struct FirstApp {
 impl FirstApp {
     pub fn new() -> Self {
         let nre_window = NreWindow::new(800, 600, "Nemesis Rendering Engine");
-        let nre_device = NreDevice::new();
+        let nre_device = NreDevice::new(&nre_window.window);
         Self {
             nre_window,
             nre_device,
