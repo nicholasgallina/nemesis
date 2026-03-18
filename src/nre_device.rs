@@ -20,6 +20,7 @@ pub struct NreDevice {
     graphics_queue: vk::Queue,
     surface: vk::SurfaceKHR,
     surface_loader: ash::khr::surface::Instance,
+    command_pool: vk::CommandPool,
 }
 
 impl NreDevice {
@@ -52,7 +53,9 @@ impl NreDevice {
         let instance = Self::create_instance(&entry, window);
         let (surface, surface_loader) = Self::create_surface(&entry, &instance, window);
         let physical_device = Self::choose_physical_device(&instance);
-        let (device, graphics_queue) = Self::create_logical_device(&instance, &physical_device);
+        let (device, graphics_queue, graphics_family_index) =
+            Self::create_logical_device(&instance, &physical_device);
+        let command_pool = Self::create_command_pool(&device, graphics_family_index);
 
         Self {
             entry,
@@ -62,6 +65,7 @@ impl NreDevice {
             graphics_queue,
             surface,
             surface_loader,
+            command_pool,
         }
     }
 
@@ -125,9 +129,9 @@ impl NreDevice {
     fn create_logical_device(
         instance: &ash::Instance,
         physical_device: &vk::PhysicalDevice,
-    ) -> (ash::Device, vk::Queue) {
+    ) -> (ash::Device, vk::Queue, u32) {
         let indices = Self::find_queue_families(instance, physical_device);
-
+        let extension_names = [ash::khr::swapchain::NAME.as_ptr()];
         let queue_priority = 1.0f32;
         let queue_create_info = vk::DeviceQueueCreateInfo {
             queue_family_index: indices.graphics_family.unwrap(),
@@ -135,26 +139,24 @@ impl NreDevice {
             p_queue_priorities: &queue_priority,
             ..Default::default()
         };
-
         let device_features = vk::PhysicalDeviceFeatures::default();
-
         let create_info = vk::DeviceCreateInfo {
             p_queue_create_infos: &queue_create_info,
             queue_create_info_count: 1,
             p_enabled_features: &device_features,
+            enabled_extension_count: extension_names.len() as u32,
+            pp_enabled_extension_names: extension_names.as_ptr(),
             ..Default::default()
         };
-
         let device = unsafe {
             instance
                 .create_device(*physical_device, &create_info, None)
                 .unwrap()
         };
-
         let graphics_queue =
             unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
 
-        (device, graphics_queue)
+        (device, graphics_queue, indices.graphics_family.unwrap())
     }
 
     fn create_surface(
@@ -175,5 +177,20 @@ impl NreDevice {
         let surface_loader = ash::khr::surface::Instance::new(entry, instance);
         (surface, surface_loader)
     }
+
+    fn create_command_pool(device: &ash::Device, queue_family_index: u32) -> vk::CommandPool {
+        let pool_info = vk::CommandPoolCreateInfo {
+            queue_family_index,
+            flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
+                | vk::CommandPoolCreateFlags::TRANSIENT,
+            ..Default::default()
+        };
+        unsafe { device.create_command_pool(&pool_info, None).unwrap() }
+    }
+
+    pub fn command_pool(&self) -> vk::CommandPool {
+        self.command_pool
+    }
+
     //
 }
