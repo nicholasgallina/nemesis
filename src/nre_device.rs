@@ -1,4 +1,3 @@
-use ash::fuchsia::external_memory;
 use ash::vk;
 use ash::Entry;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -24,6 +23,30 @@ pub struct NreDevice {
 }
 
 impl NreDevice {
+    pub fn device(&self) -> &ash::Device {
+        &self.device
+    }
+
+    pub fn instance(&self) -> &ash::Instance {
+        &self.instance
+    }
+
+    pub fn physical_device(&self) -> vk::PhysicalDevice {
+        self.physical_device
+    }
+
+    pub fn surface(&self) -> vk::SurfaceKHR {
+        self.surface
+    }
+
+    pub fn surface_loader(&self) -> &ash::khr::surface::Instance {
+        &self.surface_loader
+    }
+
+    pub fn graphics_queue(&self) -> vk::Queue {
+        self.graphics_queue
+    }
+
     pub fn new(window: &winit::window::Window) -> Self {
         let entry = unsafe { Entry::load().unwrap() };
         let instance = Self::create_instance(&entry, window);

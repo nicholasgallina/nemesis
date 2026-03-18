@@ -1,4 +1,5 @@
 use crate::nre_device::NreDevice;
+use crate::nre_swap_chain::NreSwapChain;
 use crate::nre_window::NreWindow;
 use winit::event::{Event, WindowEvent};
 

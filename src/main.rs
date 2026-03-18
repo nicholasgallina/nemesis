@@ -1,5 +1,6 @@
 mod first_app;
 mod nre_device;
+mod nre_swap_chain;
 mod nre_window;
 
 use first_app::FirstApp;
