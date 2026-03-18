@@ -26,7 +26,7 @@ impl FirstApp {
         }
     }
 
-    pub fn run(self) {
+    pub fn run(mut self) {
         let event_loop = self.nre_window.event_loop;
         event_loop
             .run(move |event, elwt| match event {
@@ -35,6 +35,22 @@ impl FirstApp {
                     ..
                 } => {
                     elwt.exit();
+                }
+                Event::AboutToWait => {
+                    if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
+                        println!("frame started");
+                        self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
+                        unsafe {
+                            self.nre_device.device().cmd_bind_pipeline(
+                                cmd,
+                                ash::vk::PipelineBindPoint::GRAPHICS,
+                                self.nre_renderer.pipeline(),
+                            );
+                            self.nre_device.device().cmd_draw(cmd, 3, 1, 0, 0);
+                        }
+                        self.nre_renderer.end_render_pass(cmd, &self.nre_device);
+                        self.nre_renderer.end_frame(&self.nre_device);
+                    }
                 }
                 _ => {}
             })

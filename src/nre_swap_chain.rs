@@ -1,14 +1,20 @@
+use std::mem::swap;
+
 use crate::nre_device::NreDevice;
 use ash::vk;
 
 pub struct NreSwapChain {
-    swapchain_loader: ash::khr::swapchain::Device,
-    swapchain: vk::SwapchainKHR,
+    pub swapchain_loader: ash::khr::swapchain::Device,
+    pub swapchain: vk::SwapchainKHR,
     images: Vec<vk::Image>,
     images_format: vk::Format,
-    extent: vk::Extent2D,
+    pub extent: vk::Extent2D,
     image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
+    pub framebuffers: Vec<vk::Framebuffer>,
+    pub image_available_semaphores: Vec<vk::Semaphore>,
+    pub render_finished_semaphores: Vec<vk::Semaphore>,
+    pub in_flight_fences: Vec<vk::Fence>,
 }
 
 impl NreSwapChain {
@@ -57,6 +63,10 @@ impl NreSwapChain {
 
         let image_views = Self::create_image_views(&images, surface_format.format, device.device());
         let render_pass = Self::create_render_pass(device.device(), surface_format.format);
+        let framebuffers =
+            Self::create_framebuffers(device.device(), &image_views, render_pass, swap_extent);
+        let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
+            Self::create_sync_objects(device.device(), images.len());
 
         Self {
             swapchain_loader,
@@ -66,6 +76,10 @@ impl NreSwapChain {
             extent: swap_extent,
             image_views,
             render_pass,
+            framebuffers,
+            image_available_semaphores,
+            render_finished_semaphores,
+            in_flight_fences,
         }
     }
 
@@ -117,6 +131,31 @@ impl NreSwapChain {
         unsafe { device.create_render_pass(&render_pass_info, None).unwrap() }
     }
 
+    fn create_sync_objects(
+        device: &ash::Device,
+        count: usize,
+    ) -> (Vec<vk::Semaphore>, Vec<vk::Semaphore>, Vec<vk::Fence>) {
+        let semaphore_info = vk::SemaphoreCreateInfo::default();
+        let fence_info = vk::FenceCreateInfo {
+            flags: vk::FenceCreateFlags::SIGNALED,
+            ..Default::default()
+        };
+
+        let mut image_available = vec![];
+        let mut render_finished = vec![];
+        let mut fences = vec![];
+
+        for _ in 0..count {
+            unsafe {
+                image_available.push(device.create_semaphore(&semaphore_info, None).unwrap());
+                render_finished.push(device.create_semaphore(&semaphore_info, None).unwrap());
+                fences.push(device.create_fence(&fence_info, None).unwrap());
+            }
+        }
+
+        (image_available, render_finished, fences)
+    }
+
     fn create_image_views(
         images: &[vk::Image],
         format: vk::Format,
@@ -139,6 +178,30 @@ impl NreSwapChain {
                     ..Default::default()
                 };
                 unsafe { device.create_image_view(&create_info, None).unwrap() }
+            })
+            .collect()
+    }
+
+    fn create_framebuffers(
+        device: &ash::Device,
+        image_views: &[vk::ImageView],
+        render_pass: vk::RenderPass,
+        extent: vk::Extent2D,
+    ) -> Vec<vk::Framebuffer> {
+        image_views
+            .iter()
+            .map(|&view| {
+                let attachments = [view];
+                let framebuffer_info = vk::FramebufferCreateInfo {
+                    render_pass,
+                    attachment_count: 1,
+                    p_attachments: attachments.as_ptr(),
+                    width: extent.width,
+                    height: extent.height,
+                    layers: 1,
+                    ..Default::default()
+                };
+                unsafe { device.create_framebuffer(&framebuffer_info, None).unwrap() }
             })
             .collect()
     }
