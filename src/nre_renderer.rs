@@ -1,9 +1,11 @@
 use crate::nre_device::NreDevice;
+use crate::nre_pipeline::NrePipeline;
 use crate::nre_swap_chain::NreSwapChain;
 use ash::vk;
 
 pub struct NreRenderer {
     swap_chain: NreSwapChain,
+    pipeline: NrePipeline,
     command_buffers: Vec<vk::CommandBuffer>,
     current_image_index: u32,
     current_frame_index: usize,
@@ -13,9 +15,11 @@ pub struct NreRenderer {
 impl NreRenderer {
     pub fn new(device: &NreDevice, extent: vk::Extent2D) -> Self {
         let swap_chain = NreSwapChain::new(device, extent);
+        let pipeline = NrePipeline::new(device, swap_chain.render_pass());
         let command_buffers = Self::create_command_buffers(device);
         Self {
             swap_chain,
+            pipeline,
             command_buffers,
             current_image_index: 0,
             current_frame_index: 0,
