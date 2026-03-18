@@ -15,6 +15,8 @@ pub struct NreDevice {
     entry: Entry,
     instance: ash::Instance,
     physical_device: vk::PhysicalDevice,
+    device: ash::Device,
+    graphics_queue: vk::Queue,
 }
 
 impl NreDevice {
@@ -22,11 +24,14 @@ impl NreDevice {
         let entry = unsafe { Entry::load().unwrap() };
         let instance = Self::create_instance(&entry);
         let physical_device = Self::choose_physical_device(&instance);
+        let (device, graphics_queue) = Self::create_logical_device(&instance, &physical_device);
 
         Self {
             entry,
             instance,
             physical_device,
+            device,
+            graphics_queue,
         }
     }
 
@@ -79,6 +84,41 @@ impl NreDevice {
             }
         }
         indices
+    }
+
+    fn create_logical_device(
+        instance: &ash::Instance,
+        physical_device: &vk::PhysicalDevice,
+    ) -> (ash::Device, vk::Queue) {
+        let indices = Self::find_queue_families(instance, physical_device);
+
+        let queue_priority = 1.0f32;
+        let queue_create_info = vk::DeviceQueueCreateInfo {
+            queue_family_index: indices.graphics_family.unwrap(),
+            queue_count: 1,
+            p_queue_priorities: &queue_priority,
+            ..Default::default()
+        };
+
+        let device_features = vk::PhysicalDeviceFeatures::default();
+
+        let create_info = vk::DeviceCreateInfo {
+            p_queue_create_infos: &queue_create_info,
+            queue_create_info_count: 1,
+            p_enabled_features: &device_features,
+            ..Default::default()
+        };
+
+        let device = unsafe {
+            instance
+                .create_device(*physical_device, &create_info, None)
+                .unwrap()
+        };
+
+        let graphics_queue =
+            unsafe { device.get_device_queue(indices.graphics_family.unwrap(), 0) };
+
+        (device, graphics_queue)
     }
     //
 }
