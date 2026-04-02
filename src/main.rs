@@ -1,5 +1,6 @@
 mod first_app;
 mod nre_device;
+mod nre_model;
 mod nre_pipeline;
 mod nre_renderer;
 mod nre_swap_chain;

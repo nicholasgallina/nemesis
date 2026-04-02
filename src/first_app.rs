@@ -1,4 +1,5 @@
 use crate::nre_device::NreDevice;
+use crate::nre_model::NreModel;
 use crate::nre_renderer::NreRenderer;
 use crate::nre_window::NreWindow;
 use ash::vk;
@@ -8,21 +9,42 @@ pub struct FirstApp {
     nre_window: NreWindow,
     nre_device: NreDevice,
     nre_renderer: NreRenderer,
+    nre_model: NreModel,
 }
 
 impl FirstApp {
     pub fn new() -> Self {
+        //
         let nre_window = NreWindow::new(800, 600, "Nemesis Rendering Engine");
+
         let nre_device = NreDevice::new(&nre_window.window);
+
         let extent = vk::Extent2D {
             width: 800,
             height: 600,
         };
+
         let nre_renderer = NreRenderer::new(&nre_device, extent);
+
+        let vertices = vec![
+            crate::nre_model::Vertex {
+                position: [0.0, -0.5],
+            },
+            crate::nre_model::Vertex {
+                position: [0.5, 0.5],
+            },
+            crate::nre_model::Vertex {
+                position: [-0.5, 0.5],
+            },
+        ];
+
+        let nre_model = NreModel::new(&nre_device, &vertices);
+
         Self {
             nre_window,
             nre_device,
             nre_renderer,
+            nre_model,
         }
     }
 
@@ -38,7 +60,6 @@ impl FirstApp {
                 }
                 Event::AboutToWait => {
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
-                        println!("frame started");
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
                         unsafe {
                             self.nre_device.device().cmd_bind_pipeline(
@@ -46,7 +67,19 @@ impl FirstApp {
                                 ash::vk::PipelineBindPoint::GRAPHICS,
                                 self.nre_renderer.pipeline(),
                             );
-                            self.nre_device.device().cmd_draw(cmd, 3, 1, 0, 0);
+                            self.nre_device.device().cmd_bind_vertex_buffers(
+                                cmd,
+                                0,
+                                &[self.nre_model.vertex_buffer()],
+                                &[0],
+                            );
+                            self.nre_device.device().cmd_draw(
+                                cmd,
+                                self.nre_model.vertex_count(),
+                                1,
+                                0,
+                                0,
+                            );
                         }
                         self.nre_renderer.end_render_pass(cmd, &self.nre_device);
                         self.nre_renderer.end_frame(&self.nre_device);

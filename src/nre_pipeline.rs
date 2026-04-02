@@ -1,4 +1,5 @@
 use crate::nre_device::NreDevice;
+use crate::nre_model::Vertex;
 use ash::vk;
 use std::ffi::CString;
 
@@ -60,7 +61,13 @@ impl NrePipeline {
             },
         ];
 
+        let binding_descriptions = Vertex::get_binding_descriptions();
+        let attribute_descriptions = Vertex::get_attribute_descriptions();
         let vertex_input = vk::PipelineVertexInputStateCreateInfo {
+            vertex_binding_description_count: binding_descriptions.len() as u32,
+            p_vertex_binding_descriptions: binding_descriptions.as_ptr(),
+            vertex_attribute_description_count: attribute_descriptions.len() as u32,
+            p_vertex_attribute_descriptions: attribute_descriptions.as_ptr(),
             ..Default::default()
         };
 
