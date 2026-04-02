@@ -5,6 +5,11 @@ use crate::nre_window::NreWindow;
 use ash::vk;
 use winit::event::{Event, WindowEvent};
 
+pub struct PushConstantData {
+    offset: [f32; 2],
+    scale: [f32; 2],
+}
+
 pub struct FirstApp {
     nre_window: NreWindow,
     nre_device: NreDevice,
@@ -67,6 +72,23 @@ impl FirstApp {
                                 ash::vk::PipelineBindPoint::GRAPHICS,
                                 self.nre_renderer.pipeline(),
                             );
+
+                            let push_data = PushConstantData {
+                                offset: [0.5, 0.0],
+                                scale: [1.0, 1.0],
+                            };
+                            let push_bytes = std::slice::from_raw_parts(
+                                &push_data as *const PushConstantData as *const u8,
+                                std::mem::size_of::<PushConstantData>(),
+                            );
+                            self.nre_device.device().cmd_push_constants(
+                                cmd,
+                                self.nre_renderer.pipeline_layout(),
+                                vk::ShaderStageFlags::VERTEX,
+                                0,
+                                push_bytes,
+                            );
+
                             self.nre_device.device().cmd_bind_vertex_buffers(
                                 cmd,
                                 0,

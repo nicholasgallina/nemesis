@@ -1,3 +1,4 @@
+use crate::first_app::PushConstantData;
 use crate::nre_device::NreDevice;
 use crate::nre_model::Vertex;
 use ash::vk;
@@ -27,7 +28,14 @@ impl NrePipeline {
     }
 
     fn create_pipeline_layout(device: &ash::Device) -> vk::PipelineLayout {
+        let push_constant_range = vk::PushConstantRange {
+            stage_flags: vk::ShaderStageFlags::VERTEX,
+            offset: 0,
+            size: std::mem::size_of::<PushConstantData>() as u32,
+        };
         let layout_info = vk::PipelineLayoutCreateInfo {
+            push_constant_range_count: 1,
+            p_push_constant_ranges: &push_constant_range,
             ..Default::default()
         };
         unsafe { device.create_pipeline_layout(&layout_info, None).unwrap() }

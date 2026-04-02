@@ -220,4 +220,8 @@ impl NreRenderer {
         };
         unsafe { device.create_command_pool(&pool_info, None).unwrap() }
     }
+
+    pub fn pipeline_layout(&self) -> vk::PipelineLayout {
+        self.pipeline.pipeline_layout()
+    }
 }
