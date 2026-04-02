@@ -15,6 +15,7 @@ pub struct FirstApp {
     nre_device: NreDevice,
     nre_renderer: NreRenderer,
     nre_model: NreModel,
+    start_time: std::time::Instant,
 }
 
 impl FirstApp {
@@ -45,11 +46,14 @@ impl FirstApp {
 
         let nre_model = NreModel::new(&nre_device, &vertices);
 
+        let start_time = std::time::Instant::now();
+
         Self {
             nre_window,
             nre_device,
             nre_renderer,
             nre_model,
+            start_time,
         }
     }
 
@@ -66,6 +70,7 @@ impl FirstApp {
                 Event::AboutToWait => {
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
+                        let time = self.start_time.elapsed().as_secs_f32();
                         unsafe {
                             self.nre_device.device().cmd_bind_pipeline(
                                 cmd,
@@ -74,7 +79,7 @@ impl FirstApp {
                             );
 
                             let push_data = PushConstantData {
-                                offset: [0.5, 0.0],
+                                offset: [time.sin() * 0.5, time.cos() * 0.5],
                                 scale: [1.0, 1.0],
                             };
                             let push_bytes = std::slice::from_raw_parts(
