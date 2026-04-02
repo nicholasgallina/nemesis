@@ -13,9 +13,13 @@ pub struct NreRenderer {
 }
 
 impl NreRenderer {
-    pub fn new(device: &NreDevice, extent: vk::Extent2D) -> Self {
+    pub fn new(
+        device: &NreDevice,
+        extent: vk::Extent2D,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> Self {
         let swap_chain = NreSwapChain::new(device, extent);
-        let pipeline = NrePipeline::new(device, swap_chain.render_pass());
+        let pipeline = NrePipeline::new(device, swap_chain.render_pass(), descriptor_set_layout);
         let command_buffers = Self::create_command_buffers(device);
         Self {
             swap_chain,
@@ -223,5 +227,9 @@ impl NreRenderer {
 
     pub fn pipeline_layout(&self) -> vk::PipelineLayout {
         self.pipeline.pipeline_layout()
+    }
+
+    pub fn current_frame_index(&self) -> usize {
+        self.current_frame_index
     }
 }

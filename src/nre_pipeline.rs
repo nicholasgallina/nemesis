@@ -10,8 +10,12 @@ pub struct NrePipeline {
 }
 
 impl NrePipeline {
-    pub fn new(device: &NreDevice, render_pass: vk::RenderPass) -> Self {
-        let pipeline_layout = Self::create_pipeline_layout(device.device());
+    pub fn new(
+        device: &NreDevice,
+        render_pass: vk::RenderPass,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> Self {
+        let pipeline_layout = Self::create_pipeline_layout(device.device(), descriptor_set_layout);
         let pipeline = Self::create_pipeline(device.device(), render_pass, pipeline_layout);
         Self {
             pipeline,
@@ -27,13 +31,18 @@ impl NrePipeline {
         self.pipeline
     }
 
-    fn create_pipeline_layout(device: &ash::Device) -> vk::PipelineLayout {
+    fn create_pipeline_layout(
+        device: &ash::Device,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> vk::PipelineLayout {
         let push_constant_range = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::VERTEX,
             offset: 0,
             size: std::mem::size_of::<PushConstantData>() as u32,
         };
         let layout_info = vk::PipelineLayoutCreateInfo {
+            set_layout_count: 1,
+            p_set_layouts: &descriptor_set_layout,
             push_constant_range_count: 1,
             p_push_constant_ranges: &push_constant_range,
             ..Default::default()

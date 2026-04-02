@@ -86,7 +86,7 @@ impl NreModel {
         (buffer, memory)
     }
 
-    fn find_memory_type(device: &NreDevice, type_filter: u32) -> u32 {
+    pub fn find_memory_type(device: &NreDevice, type_filter: u32) -> u32 {
         let props = unsafe {
             device
                 .instance()
