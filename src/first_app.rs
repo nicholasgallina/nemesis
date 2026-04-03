@@ -46,13 +46,13 @@ impl FirstApp {
 
         let vertices = vec![
             crate::nre_model::Vertex {
-                position: [0.0, -0.5],
+                position: [0.0, -0.5, 0.0],
             },
             crate::nre_model::Vertex {
-                position: [0.5, 0.5],
+                position: [0.5, 0.5, 0.0],
             },
             crate::nre_model::Vertex {
-                position: [-0.5, 0.5],
+                position: [-0.5, 0.5, 0.0],
             },
         ];
 
@@ -104,7 +104,19 @@ impl FirstApp {
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
                         let time = self.start_time.elapsed().as_secs_f32();
-                        let matrix = glam::Mat4::from_rotation_z(time);
+                        let model = glam::Mat4::from_rotation_y(time);
+                        let view = glam::Mat4::look_at_rh(
+                            glam::Vec3::new(0.0, 0.0, -2.0),
+                            glam::Vec3::ZERO,
+                            glam::Vec3::Y,
+                        );
+                        let proj = glam::Mat4::perspective_rh(
+                            f32::to_radians(45.0),
+                            800.0 / 600.0,
+                            0.1,
+                            100.0,
+                        );
+                        let matrix = proj * view * model;
                         let frame = self.nre_renderer.current_frame_index();
                         unsafe {
                             let ptr = self.uniform_buffers.mapped_ptr(frame) as *mut glam::Mat4;

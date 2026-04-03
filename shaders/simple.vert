@@ -1,6 +1,6 @@
 #version 450
 
-layout(location = 0) in vec2 position;
+layout(location = 0) in vec3 position;
 
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 transform;
@@ -13,5 +13,5 @@ layout(push_constant) uniform Push {
 
 
 void main() {
-    gl_Position = ubo.transform * vec4(push.scale * position + push.offset, 0.0, 1.0);
+    gl_Position = ubo.transform * vec4(position, 1.0);
 }
