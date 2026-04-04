@@ -1,5 +1,6 @@
 use crate::nre_descriptor::{NreDescriptorPool, NreDescriptorSetLayout, NreUniformBuffer};
 use crate::nre_device::NreDevice;
+use crate::nre_game_object::NreGameObject;
 use crate::nre_model::NreModel;
 use crate::nre_renderer::NreRenderer;
 use crate::nre_window::NreWindow;
@@ -8,15 +9,14 @@ use glam;
 use winit::event::{Event, WindowEvent};
 
 pub struct PushConstantData {
-    offset: [f32; 2],
-    scale: [f32; 2],
+    transform: glam::Mat4,
 }
 
 pub struct FirstApp {
     nre_window: NreWindow,
     nre_device: NreDevice,
     nre_renderer: NreRenderer,
-    nre_model: NreModel,
+    game_objects: Vec<NreGameObject>,
     start_time: std::time::Instant,
     descriptor_set_layout: NreDescriptorSetLayout,
     descriptor_pool: NreDescriptorPool,
@@ -54,7 +54,12 @@ impl FirstApp {
             },
         ];
 
-        let nre_model = NreModel::new(&nre_device, &vertices);
+        let mut obj1 = NreGameObject::new(NreModel::new(&nre_device, &vertices));
+        obj1.translation = glam::Vec3::new(-0.5, 0.0, 0.0);
+        let mut obj2 = NreGameObject::new(NreModel::new(&nre_device, &vertices));
+        obj2.translation = glam::Vec3::new(0.5, 0.0, 0.0);
+
+        let game_objects = vec![obj1, obj2];
         let start_time = std::time::Instant::now();
 
         for i in 0..2 {
@@ -78,7 +83,7 @@ impl FirstApp {
             nre_window,
             nre_device,
             nre_renderer,
-            nre_model,
+            game_objects,
             start_time,
             descriptor_set_layout,
             descriptor_pool,
@@ -104,7 +109,6 @@ impl FirstApp {
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
                         let time = self.start_time.elapsed().as_secs_f32();
-                        let model = glam::Mat4::from_rotation_y(time);
                         let view = glam::Mat4::look_at_rh(
                             glam::Vec3::new(0.0, 0.0, -2.0),
                             glam::Vec3::ZERO,
@@ -116,56 +120,62 @@ impl FirstApp {
                             0.1,
                             100.0,
                         );
-                        let matrix = proj * view * model;
                         let frame = self.nre_renderer.current_frame_index();
                         unsafe {
-                            let ptr = self.uniform_buffers.mapped_ptr(frame) as *mut glam::Mat4;
-                            ptr.write(matrix);
-
                             self.nre_device.device().cmd_bind_pipeline(
                                 cmd,
                                 ash::vk::PipelineBindPoint::GRAPHICS,
                                 self.nre_renderer.pipeline(),
                             );
-
                             self.nre_device.device().cmd_bind_descriptor_sets(
                                 cmd,
                                 vk::PipelineBindPoint::GRAPHICS,
                                 self.nre_renderer.pipeline_layout(),
                                 0,
-                                &[self.descriptor_sets[self.nre_renderer.current_frame_index()]],
+                                &[self.descriptor_sets[frame]],
                                 &[],
                             );
 
-                            let push_data = PushConstantData {
-                                offset: [0.0, 0.0],
-                                scale: [1.0, 1.0],
-                            };
-                            let push_bytes = std::slice::from_raw_parts(
-                                &push_data as *const PushConstantData as *const u8,
-                                std::mem::size_of::<PushConstantData>(),
-                            );
-                            self.nre_device.device().cmd_push_constants(
-                                cmd,
-                                self.nre_renderer.pipeline_layout(),
-                                vk::ShaderStageFlags::VERTEX,
-                                0,
-                                push_bytes,
-                            );
+                            let vp = proj * view;
+                            let ptr = self.uniform_buffers.mapped_ptr(frame) as *mut glam::Mat4;
+                            ptr.write(vp);
 
-                            self.nre_device.device().cmd_bind_vertex_buffers(
-                                cmd,
-                                0,
-                                &[self.nre_model.vertex_buffer()],
-                                &[0],
-                            );
-                            self.nre_device.device().cmd_draw(
-                                cmd,
-                                self.nre_model.vertex_count(),
-                                1,
-                                0,
-                                0,
-                            );
+                            for obj in &self.game_objects {
+                                let model_mat = glam::Mat4::from_rotation_y(time) * obj.transform();
+                                let matrix = proj * view * model_mat;
+
+                                let ptr = self.uniform_buffers.mapped_ptr(frame) as *mut glam::Mat4;
+                                ptr.write(matrix);
+
+                                let model_mat = glam::Mat4::from_rotation_y(time) * obj.transform();
+                                let push_data = PushConstantData {
+                                    transform: model_mat,
+                                };
+                                let push_bytes = std::slice::from_raw_parts(
+                                    &push_data as *const PushConstantData as *const u8,
+                                    std::mem::size_of::<PushConstantData>(),
+                                );
+                                self.nre_device.device().cmd_push_constants(
+                                    cmd,
+                                    self.nre_renderer.pipeline_layout(),
+                                    vk::ShaderStageFlags::VERTEX,
+                                    0,
+                                    push_bytes,
+                                );
+                                self.nre_device.device().cmd_bind_vertex_buffers(
+                                    cmd,
+                                    0,
+                                    &[obj.model.vertex_buffer()],
+                                    &[0],
+                                );
+                                self.nre_device.device().cmd_draw(
+                                    cmd,
+                                    obj.model.vertex_count(),
+                                    1,
+                                    0,
+                                    0,
+                                );
+                            }
                         }
                         self.nre_renderer.end_render_pass(cmd, &self.nre_device);
                         self.nre_renderer.end_frame(&self.nre_device);

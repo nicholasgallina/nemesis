@@ -1,6 +1,7 @@
 mod first_app;
 mod nre_descriptor;
 mod nre_device;
+mod nre_game_object;
 mod nre_model;
 mod nre_pipeline;
 mod nre_renderer;

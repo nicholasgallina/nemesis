@@ -7,11 +7,10 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(push_constant) uniform Push {
-    vec2 offset;
-    vec2 scale;
+    mat4 transform;
 } push;
 
 
 void main() {
-    gl_Position = ubo.transform * vec4(position, 1.0);
+    gl_Position = ubo.transform * push.transform * vec4(position, 1.0);
 }
