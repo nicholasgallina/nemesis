@@ -85,7 +85,7 @@ impl NreDevice {
             p_application_info: &app_info,
             enabled_extension_count: extension_names.len() as u32,
             pp_enabled_extension_names: extension_names.as_ptr(),
-            enabled_layer_count: 1,
+            enabled_layer_count: 0,
             pp_enabled_layer_names: layer_names.as_ptr(),
             ..Default::default()
         };

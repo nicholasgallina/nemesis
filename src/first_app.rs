@@ -26,9 +26,7 @@ pub struct FirstApp {
 
 impl FirstApp {
     pub fn new() -> Self {
-        //
         let nre_window = NreWindow::new(800, 600, "Nemesis Rendering Engine");
-
         let nre_device = NreDevice::new(&nre_window.window);
 
         let extent = vk::Extent2D {
@@ -57,7 +55,6 @@ impl FirstApp {
         ];
 
         let nre_model = NreModel::new(&nre_device, &vertices);
-
         let start_time = std::time::Instant::now();
 
         for i in 0..2 {
@@ -100,7 +97,10 @@ impl FirstApp {
                 } => {
                     elwt.exit();
                 }
-                Event::AboutToWait => {
+                Event::WindowEvent {
+                    event: WindowEvent::RedrawRequested,
+                    ..
+                } => {
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
                         let time = self.start_time.elapsed().as_secs_f32();
@@ -170,6 +170,9 @@ impl FirstApp {
                         self.nre_renderer.end_render_pass(cmd, &self.nre_device);
                         self.nre_renderer.end_frame(&self.nre_device);
                     }
+                }
+                Event::AboutToWait => {
+                    self.nre_window.window.request_redraw();
                 }
                 _ => {}
             })

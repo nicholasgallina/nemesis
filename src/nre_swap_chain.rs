@@ -255,9 +255,6 @@ impl NreSwapChain {
     }
 
     fn choose_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
-        if present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
-            return vk::PresentModeKHR::MAILBOX;
-        }
         vk::PresentModeKHR::FIFO
     }
 
