@@ -15,6 +15,9 @@ pub struct NreSwapChain {
     pub image_available_semaphores: Vec<vk::Semaphore>,
     pub render_finished_semaphores: Vec<vk::Semaphore>,
     pub in_flight_fences: Vec<vk::Fence>,
+    depth_image: vk::Image,
+    depth_image_memory: vk::DeviceMemory,
+    depth_image_view: vk::ImageView,
 }
 
 impl NreSwapChain {
@@ -63,10 +66,18 @@ impl NreSwapChain {
 
         let image_views = Self::create_image_views(&images, surface_format.format, device.device());
         let render_pass = Self::create_render_pass(device.device(), surface_format.format);
-        let framebuffers =
-            Self::create_framebuffers(device.device(), &image_views, render_pass, swap_extent);
         let (image_available_semaphores, render_finished_semaphores, in_flight_fences) =
             Self::create_sync_objects(device.device(), images.len());
+
+        let (depth_image, depth_image_memory, depth_image_view) =
+            Self::create_depth_resources(device, swap_extent);
+        let framebuffers = Self::create_framebuffers(
+            device.device(),
+            &image_views,
+            render_pass,
+            swap_extent,
+            depth_image_view,
+        );
 
         Self {
             swapchain_loader,
@@ -80,6 +91,9 @@ impl NreSwapChain {
             image_available_semaphores,
             render_finished_semaphores,
             in_flight_fences,
+            depth_image,
+            depth_image_memory,
+            depth_image_view,
         }
     }
 
@@ -96,31 +110,53 @@ impl NreSwapChain {
             ..Default::default()
         };
 
+        let depth_attachment = vk::AttachmentDescription {
+            format: vk::Format::D32_SFLOAT,
+            samples: vk::SampleCountFlags::TYPE_1,
+            load_op: vk::AttachmentLoadOp::CLEAR,
+            store_op: vk::AttachmentStoreOp::DONT_CARE,
+            stencil_load_op: vk::AttachmentLoadOp::DONT_CARE,
+            stencil_store_op: vk::AttachmentStoreOp::DONT_CARE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            final_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ..Default::default()
+        };
+
         let color_attachment_ref = vk::AttachmentReference {
             attachment: 0,
             layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        };
+
+        let depth_attachment_ref = vk::AttachmentReference {
+            attachment: 1,
+            layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         };
 
         let subpass = vk::SubpassDescription {
             pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
             color_attachment_count: 1,
             p_color_attachments: &color_attachment_ref,
+            p_depth_stencil_attachment: &depth_attachment_ref,
             ..Default::default()
         };
 
         let dependency = vk::SubpassDependency {
             src_subpass: vk::SUBPASS_EXTERNAL,
             dst_subpass: 0,
-            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            src_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
             src_access_mask: vk::AccessFlags::empty(),
-            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            dst_stage_mask: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+            dst_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
             ..Default::default()
         };
 
+        let attachments = [color_attachment, depth_attachment];
         let render_pass_info = vk::RenderPassCreateInfo {
-            attachment_count: 1,
-            p_attachments: &color_attachment,
+            attachment_count: attachments.len() as u32,
+            p_attachments: attachments.as_ptr(),
             subpass_count: 1,
             p_subpasses: &subpass,
             dependency_count: 1,
@@ -187,14 +223,15 @@ impl NreSwapChain {
         image_views: &[vk::ImageView],
         render_pass: vk::RenderPass,
         extent: vk::Extent2D,
+        depth_image_view: vk::ImageView,
     ) -> Vec<vk::Framebuffer> {
         image_views
             .iter()
             .map(|&view| {
-                let attachments = [view];
+                let attachments = [view, depth_image_view];
                 let framebuffer_info = vk::FramebufferCreateInfo {
                     render_pass,
-                    attachment_count: 1,
+                    attachment_count: 2,
                     p_attachments: attachments.as_ptr(),
                     width: extent.width,
                     height: extent.height,
@@ -241,6 +278,58 @@ impl NreSwapChain {
                 capabilities.max_image_extent.height,
             ),
         }
+    }
+
+    pub fn create_depth_resources(
+        device: &NreDevice,
+        extent: vk::Extent2D,
+    ) -> (vk::Image, vk::DeviceMemory, vk::ImageView) {
+        let image_info = vk::ImageCreateInfo {
+            image_type: vk::ImageType::TYPE_2D,
+            format: vk::Format::D32_SFLOAT,
+            extent: vk::Extent3D {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            },
+            mip_levels: 1,
+            array_layers: 1,
+            samples: vk::SampleCountFlags::TYPE_1,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        let image = unsafe { device.device().create_image(&image_info, None).unwrap() };
+
+        let mem_requirements = unsafe { device.device().get_image_memory_requirements(image) };
+        let alloc_info = vk::MemoryAllocateInfo {
+            allocation_size: mem_requirements.size,
+            memory_type_index: crate::nre_model::NreModel::find_memory_type(
+                device,
+                mem_requirements.memory_type_bits,
+            ),
+            ..Default::default()
+        };
+        let memory = unsafe { device.device().allocate_memory(&alloc_info, None).unwrap() };
+        unsafe { device.device().bind_image_memory(image, memory, 0).unwrap() };
+
+        let view_info = vk::ImageViewCreateInfo {
+            image,
+            view_type: vk::ImageViewType::TYPE_2D,
+            format: vk::Format::D32_SFLOAT,
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::DEPTH,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..Default::default()
+        };
+        let image_view = unsafe { device.device().create_image_view(&view_info, None).unwrap() };
+
+        (image, memory, image_view)
     }
 
     //

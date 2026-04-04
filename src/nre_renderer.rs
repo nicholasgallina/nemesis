@@ -143,11 +143,19 @@ impl NreRenderer {
     }
 
     pub fn begin_render_pass(&self, cmd: vk::CommandBuffer, device: &NreDevice) {
-        let clear_values = [vk::ClearValue {
-            color: vk::ClearColorValue {
-                float32: [0.01, 0.01, 0.01, 1.0],
+        let clear_values = [
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.01, 0.01, 0.01, 1.0],
+                },
             },
-        }];
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            },
+        ];
 
         let render_pass_info = vk::RenderPassBeginInfo {
             render_pass: self.swap_chain.render_pass(),
@@ -156,7 +164,7 @@ impl NreRenderer {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: self.swap_chain.extent,
             },
-            clear_value_count: 1,
+            clear_value_count: 2,
             p_clear_values: clear_values.as_ptr(),
             ..Default::default()
         };

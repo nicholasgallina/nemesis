@@ -137,6 +137,14 @@ impl NrePipeline {
             ..Default::default()
         };
 
+        let depth_stencil = vk::PipelineDepthStencilStateCreateInfo {
+            depth_test_enable: vk::TRUE,
+            depth_write_enable: vk::TRUE,
+            depth_compare_op: vk::CompareOp::LESS,
+            depth_bounds_test_enable: vk::FALSE,
+            ..Default::default()
+        };
+
         let pipeline_info = vk::GraphicsPipelineCreateInfo {
             stage_count: shader_stages.len() as u32,
             p_stages: shader_stages.as_ptr(),
@@ -147,6 +155,7 @@ impl NrePipeline {
             p_multisample_state: &multisampling,
             p_color_blend_state: &color_blending,
             p_dynamic_state: &dynamic_state,
+            p_depth_stencil_state: &depth_stencil,
             layout: pipeline_layout,
             render_pass,
             subpass: 0,
