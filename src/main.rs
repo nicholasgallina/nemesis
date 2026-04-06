@@ -1,4 +1,6 @@
 mod first_app;
+mod nre_camera;
+mod nre_controller;
 mod nre_descriptor;
 mod nre_device;
 mod nre_game_object;

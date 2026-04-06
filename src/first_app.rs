@@ -1,3 +1,4 @@
+use crate::nre_camera::Camera;
 use crate::nre_descriptor::{NreDescriptorPool, NreDescriptorSetLayout, NreUniformBuffer};
 use crate::nre_device::NreDevice;
 use crate::nre_game_object::NreGameObject;
@@ -22,6 +23,9 @@ pub struct FirstApp {
     descriptor_pool: NreDescriptorPool,
     uniform_buffers: NreUniformBuffer,
     descriptor_sets: Vec<vk::DescriptorSet>,
+    camera: crate::nre_camera::PerspectiveCamera,
+    controller: crate::nre_controller::Controller,
+    keys: std::collections::HashSet<winit::keyboard::KeyCode>,
 }
 
 impl FirstApp {
@@ -79,6 +83,11 @@ impl FirstApp {
             unsafe { nre_device.device().update_descriptor_sets(&[write], &[]) };
         }
 
+        let camera =
+            crate::nre_camera::PerspectiveCamera::new(800.0 / 600.0, f32::to_radians(45.0));
+        let controller = crate::nre_controller::Controller::new();
+        let keys = std::collections::HashSet::new();
+
         Self {
             nre_window,
             nre_device,
@@ -89,6 +98,9 @@ impl FirstApp {
             descriptor_pool,
             uniform_buffers,
             descriptor_sets,
+            camera,
+            controller,
+            keys,
         }
     }
 
@@ -103,23 +115,31 @@ impl FirstApp {
                     elwt.exit();
                 }
                 Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput { event, .. },
+                    ..
+                } => {
+                    use winit::keyboard::PhysicalKey;
+                    if let PhysicalKey::Code(code) = event.physical_key {
+                        if event.state == winit::event::ElementState::Pressed {
+                            self.keys.insert(code);
+                        } else {
+                            self.keys.remove(&code);
+                        }
+                    }
+                }
+                Event::WindowEvent {
                     event: WindowEvent::RedrawRequested,
                     ..
                 } => {
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
                         let time = self.start_time.elapsed().as_secs_f32();
-                        let view = glam::Mat4::look_at_rh(
-                            glam::Vec3::new(0.0, 0.0, -2.0),
-                            glam::Vec3::ZERO,
-                            glam::Vec3::Y,
-                        );
-                        let proj = glam::Mat4::perspective_rh(
-                            f32::to_radians(45.0),
-                            800.0 / 600.0,
-                            0.1,
-                            100.0,
-                        );
+
+                        let dt = 1.0 / 60.0;
+                        self.controller.update(dt, &self.keys, &mut self.camera);
+                        let view = self.camera.view_matrix();
+                        let proj = self.camera.projection_matrix();
+
                         let frame = self.nre_renderer.current_frame_index();
                         unsafe {
                             self.nre_device.device().cmd_bind_pipeline(
@@ -141,12 +161,6 @@ impl FirstApp {
                             ptr.write(vp);
 
                             for obj in &self.game_objects {
-                                let model_mat = glam::Mat4::from_rotation_y(time) * obj.transform();
-                                let matrix = proj * view * model_mat;
-
-                                let ptr = self.uniform_buffers.mapped_ptr(frame) as *mut glam::Mat4;
-                                ptr.write(matrix);
-
                                 let model_mat = glam::Mat4::from_rotation_y(time) * obj.transform();
                                 let push_data = PushConstantData {
                                     transform: model_mat,
