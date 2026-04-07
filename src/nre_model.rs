@@ -3,6 +3,7 @@ use ash::vk;
 
 pub struct Vertex {
     pub position: [f32; 3],
+    pub normal: [f32; 3],
 }
 
 impl Vertex {
@@ -15,12 +16,20 @@ impl Vertex {
     }
 
     pub fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
-        vec![vk::VertexInputAttributeDescription {
-            binding: 0,
-            location: 0,
-            format: vk::Format::R32G32B32_SFLOAT,
-            offset: 0,
-        }]
+        vec![
+            vk::VertexInputAttributeDescription {
+                binding: 0,
+                location: 0,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 0,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 0,
+                location: 1,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: std::mem::size_of::<[f32; 3]>() as u32,
+            },
+        ]
     }
 }
 
