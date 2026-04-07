@@ -1,5 +1,6 @@
 use crate::nre_device::NreDevice;
 use ash::vk;
+use tobj;
 
 pub struct Vertex {
     pub position: [f32; 3],
@@ -121,5 +122,44 @@ impl NreModel {
 
     pub fn vertex_count(&self) -> u32 {
         self.vertex_count
+    }
+
+    pub fn from_obj(device: &NreDevice, path: &str) -> Self {
+        let (models, _) = tobj::load_obj(
+            path,
+            &tobj::LoadOptions {
+                triangulate: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let mesh = &models[0].mesh;
+        let mut vertices = vec![];
+
+        for i in 0..mesh.indices.len() {
+            let idx = mesh.indices[i] as usize;
+            let pos = [
+                mesh.positions[idx * 3],
+                mesh.positions[idx * 3 + 1],
+                mesh.positions[idx * 3 + 2],
+            ];
+            let normal = if mesh.normals.is_empty() {
+                [0.0, 1.0, 0.0]
+            } else {
+                let nidx = mesh.normal_indices[i] as usize;
+                [
+                    mesh.normals[nidx * 3],
+                    mesh.normals[nidx * 3 + 1],
+                    mesh.normals[nidx * 3 + 2],
+                ]
+            };
+            vertices.push(Vertex {
+                position: pos,
+                normal,
+            });
+        }
+
+        Self::new(device, &vertices)
     }
 }

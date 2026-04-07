@@ -46,27 +46,12 @@ impl FirstApp {
 
         let nre_renderer = NreRenderer::new(&nre_device, extent, descriptor_set_layout.layout());
 
-        let vertices = vec![
-            crate::nre_model::Vertex {
-                position: [0.0, -0.5, 0.0],
-                normal: [0.0, 0.0, -1.0],
-            },
-            crate::nre_model::Vertex {
-                position: [0.5, 0.5, 0.0],
-                normal: [0.0, 0.0, -1.0],
-            },
-            crate::nre_model::Vertex {
-                position: [-0.5, 0.5, 0.0],
-                normal: [0.0, 0.0, -1.0],
-            },
-        ];
+        let model = NreModel::from_obj(&nre_device, "models/character.obj");
+        let mut obj1 = NreGameObject::new(model);
+        obj1.translation = glam::Vec3::new(0.0, 0.0, 2.0);
+        obj1.scale = glam::Vec3::splat(0.5);
+        let game_objects = vec![obj1];
 
-        let mut obj1 = NreGameObject::new(NreModel::new(&nre_device, &vertices));
-        obj1.translation = glam::Vec3::new(-0.5, 0.0, 0.0);
-        let mut obj2 = NreGameObject::new(NreModel::new(&nre_device, &vertices));
-        obj2.translation = glam::Vec3::new(0.5, 0.0, 0.0);
-
-        let game_objects = vec![obj1, obj2];
         let start_time = std::time::Instant::now();
 
         for i in 0..2 {
@@ -164,7 +149,7 @@ impl FirstApp {
                             ptr.write(vp);
 
                             for obj in &self.game_objects {
-                                let model_mat = glam::Mat4::from_rotation_y(time) * obj.transform();
+                                let model_mat = obj.transform();
                                 let push_data = PushConstantData {
                                     transform: model_mat,
                                 };
