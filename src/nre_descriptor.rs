@@ -7,11 +7,13 @@ use glam;
 // STRUCT -> Descriptor Set Layout
 pub struct NreDescriptorSetLayout {
     layout: vk::DescriptorSetLayout,
+    device: ash::Device,
 }
 
 // STRUCT -> Descriptor Pool
 pub struct NreDescriptorPool {
     pool: vk::DescriptorPool,
+    device: ash::Device,
 }
 
 // STRUCT -> Uniform Buffer
@@ -19,6 +21,7 @@ pub struct NreUniformBuffer {
     buffers: Vec<vk::Buffer>,
     memories: Vec<vk::DeviceMemory>,
     mapped: Vec<*mut std::ffi::c_void>,
+    device: ash::Device,
 }
 
 // IMPL -> Descriptor Set Layout
@@ -47,7 +50,10 @@ impl NreDescriptorSetLayout {
                 .unwrap()
         };
         //
-        Self { layout }
+        Self {
+            layout,
+            device: device.device().clone(),
+        }
     }
     //
     pub fn layout(&self) -> vk::DescriptorSetLayout {
@@ -77,7 +83,10 @@ impl NreDescriptorPool {
                 .unwrap()
         };
         //
-        Self { pool }
+        Self {
+            pool,
+            device: device.device().clone(),
+        }
     }
     //
     pub fn pool(&self) -> vk::DescriptorPool {
@@ -152,6 +161,7 @@ impl NreUniformBuffer {
             buffers: buffers,
             memories: memories,
             mapped: mapped,
+            device: device.device().clone(),
         }
     }
     //
@@ -161,5 +171,33 @@ impl NreUniformBuffer {
 
     pub fn mapped_ptr(&self, index: usize) -> *mut std::ffi::c_void {
         self.mapped[index]
+    }
+}
+
+// override! DROP
+impl Drop for NreUniformBuffer {
+    fn drop(&mut self) {
+        unsafe {
+            for i in 0..self.buffers.len() {
+                self.device.destroy_buffer(self.buffers[i], None);
+                self.device.free_memory(self.memories[i], None);
+            }
+        }
+    }
+}
+
+impl Drop for NreDescriptorSetLayout {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_descriptor_set_layout(self.layout, None);
+        }
+    }
+}
+
+impl Drop for NreDescriptorPool {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_descriptor_pool(self.pool, None);
+        }
     }
 }

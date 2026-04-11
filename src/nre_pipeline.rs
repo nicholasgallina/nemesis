@@ -7,6 +7,7 @@ use std::ffi::CString;
 pub struct NrePipeline {
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
+    device: ash::Device,
 }
 
 impl NrePipeline {
@@ -20,6 +21,7 @@ impl NrePipeline {
         Self {
             pipeline,
             pipeline_layout,
+            device: device.device().clone(),
         }
     }
 
@@ -188,5 +190,16 @@ impl NrePipeline {
             ..Default::default()
         };
         unsafe { device.create_shader_module(&create_info, None).unwrap() }
+    }
+}
+
+// overide! DROP
+impl Drop for NrePipeline {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+        }
     }
 }

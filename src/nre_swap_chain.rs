@@ -1,5 +1,3 @@
-use std::mem::swap;
-
 use crate::nre_device::NreDevice;
 use ash::vk;
 
@@ -18,6 +16,7 @@ pub struct NreSwapChain {
     depth_image: vk::Image,
     depth_image_memory: vk::DeviceMemory,
     depth_image_view: vk::ImageView,
+    device: ash::Device,
 }
 
 impl NreSwapChain {
@@ -94,6 +93,7 @@ impl NreSwapChain {
             depth_image,
             depth_image_memory,
             depth_image_view,
+            device: device.device().clone(),
         }
     }
 
@@ -254,7 +254,7 @@ impl NreSwapChain {
             .unwrap_or(formats[0])
     }
 
-    fn choose_present_mode(present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
+    fn choose_present_mode(_present_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
         vk::PresentModeKHR::FIFO
     }
 
@@ -371,6 +371,34 @@ impl SwapChainSupportDetails {
             capabilities,
             formats,
             present_modes,
+        }
+    }
+}
+
+impl Drop for NreSwapChain {
+    fn drop(&mut self) {
+        unsafe {
+            for &fb in &self.framebuffers {
+                self.device.destroy_framebuffer(fb, None);
+            }
+            for &iv in &self.image_views {
+                self.device.destroy_image_view(iv, None);
+            }
+            self.device.destroy_image_view(self.depth_image_view, None);
+            self.device.destroy_image(self.depth_image, None);
+            self.device.free_memory(self.depth_image_memory, None);
+            self.device.destroy_render_pass(self.render_pass, None);
+            for &sem in &self.image_available_semaphores {
+                self.device.destroy_semaphore(sem, None);
+            }
+            for &sem in &self.render_finished_semaphores {
+                self.device.destroy_semaphore(sem, None);
+            }
+            for &fence in &self.in_flight_fences {
+                self.device.destroy_fence(fence, None);
+            }
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain, None);
         }
     }
 }

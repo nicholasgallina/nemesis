@@ -13,7 +13,7 @@ impl Controller {
     pub fn new() -> Self {
         Self {
             move_speed: 6.0,
-            look_speed: 0.005,
+            look_speed: 0.010,
             velocity: glam::Vec3::ZERO,
             damping: 0.85,
         }

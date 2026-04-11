@@ -38,6 +38,7 @@ pub struct NreModel {
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
     vertex_count: u32,
+    device: ash::Device,
 }
 
 impl NreModel {
@@ -47,6 +48,7 @@ impl NreModel {
             vertex_buffer,
             vertex_buffer_memory,
             vertex_count: vertices.len() as u32,
+            device: device.device().clone(),
         }
     }
 
@@ -124,6 +126,7 @@ impl NreModel {
         self.vertex_count
     }
 
+    // chore: iterate through game obj
     pub fn from_obj(device: &NreDevice, path: &str) -> Self {
         let (models, _) = tobj::load_obj(
             path,
@@ -161,5 +164,15 @@ impl NreModel {
         }
 
         Self::new(device, &vertices)
+    }
+}
+
+// override! DROP
+impl Drop for NreModel {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.destroy_buffer(self.vertex_buffer, None);
+            self.device.free_memory(self.vertex_buffer_memory, None);
+        }
     }
 }

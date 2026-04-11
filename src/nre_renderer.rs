@@ -200,10 +200,6 @@ impl NreRenderer {
         }
     }
 
-    pub fn get_swap_chain_render_pass(&self) -> vk::RenderPass {
-        self.swap_chain.render_pass()
-    }
-
     pub fn get_current_command_buffer(&self) -> vk::CommandBuffer {
         self.command_buffers[self.current_frame_index]
     }
@@ -221,16 +217,6 @@ impl NreRenderer {
                 .allocate_command_buffers(&alloc_info)
                 .unwrap()
         }
-    }
-
-    fn create_command_pool(device: &ash::Device, queue_family_index: u32) -> vk::CommandPool {
-        let pool_info = vk::CommandPoolCreateInfo {
-            queue_family_index,
-            flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER
-                | vk::CommandPoolCreateFlags::TRANSIENT,
-            ..Default::default()
-        };
-        unsafe { device.create_command_pool(&pool_info, None).unwrap() }
     }
 
     pub fn pipeline_layout(&self) -> vk::PipelineLayout {
