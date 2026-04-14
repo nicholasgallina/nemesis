@@ -203,7 +203,6 @@ impl NreDevice {
 impl Drop for NreDevice {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
             self.instance.destroy_instance(None);
         }

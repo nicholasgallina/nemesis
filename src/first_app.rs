@@ -71,8 +71,9 @@ impl FirstApp {
             unsafe { nre_device.device().update_descriptor_sets(&[write], &[]) };
         }
 
-        let camera =
+        let mut camera =
             crate::nre_camera::PerspectiveCamera::new(800.0 / 600.0, f32::to_radians(45.0));
+        camera.world_position = glam::Vec3::new(0.0, 0.0, -3.0);
         let controller = crate::nre_controller::Controller::new();
         let keys = std::collections::HashSet::new();
 

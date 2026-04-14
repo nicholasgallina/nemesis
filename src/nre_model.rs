@@ -34,6 +34,41 @@ impl Vertex {
     }
 }
 
+// molecular data structures
+
+// STRUCT
+pub struct Atom {
+    pub position: [f32; 3],
+    pub radius: f32,
+    pub color: [f32; 3],
+    pub element: String,
+}
+
+// STRUCT
+pub struct Bond {
+    pub atom_a: usize,
+    pub atom_b: usize,
+}
+
+// STRUCT
+pub struct MoleculeData {
+    pub atoms: Vec<Atom>,
+    pub bonds: Vec<Bond>,
+    pub center_of_mass: [f32; 3],
+}
+
+fn element_properties(element: &str) -> (f32, [f32; 3]) {
+    match element {
+        "H" => (1.20, [1.00, 1.00, 1.00]), // white
+        "C" => (1.70, [0.50, 0.50, 0.50]), // grey
+        "N" => (1.55, [0.13, 0.47, 0.71]), // blue
+        "O" => (1.52, [0.84, 0.18, 0.18]), // red
+        "S" => (1.80, [1.00, 0.78, 0.20]), // yellow
+        "P" => (1.80, [1.00, 0.50, 0.00]), // orange
+        _ => (1.50, [0.70, 0.70, 0.70]),   // fallback: grey
+    }
+}
+
 pub struct NreModel {
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
@@ -126,7 +161,7 @@ impl NreModel {
         self.vertex_count
     }
 
-    // chore: iterate through game obj
+    // FUNC: device + path -> NreModel
     pub fn from_obj(device: &NreDevice, path: &str) -> Self {
         let (models, _) = tobj::load_obj(
             path,
@@ -164,6 +199,83 @@ impl NreModel {
         }
 
         Self::new(device, &vertices)
+    }
+
+    // FUNC: path -> MoleculeData
+    pub fn from_pdb(path: &str) -> MoleculeData {
+        let contents = std::fs::read_to_string(path)
+            .unwrap_or_else(|_| panic!("ERROR: can't read PDB file: {}", path));
+
+        let mut atoms: Vec<Atom> = Vec::new();
+        let mut bonds: Vec<Bond> = Vec::new();
+
+        for line in contents.lines() {
+            if line.starts_with("ATOM  ") || line.starts_with("HETATM") {
+                let x: f32 = line[30..38].trim().parse().unwrap_or(0.0);
+                let y: f32 = line[38..46].trim().parse().unwrap_or(0.0);
+                let z: f32 = line[46..54].trim().parse().unwrap_or(0.0);
+
+                let element = if line.len() >= 78 {
+                    line[76..78].trim().to_uppercase()
+                } else {
+                    line[12..14]
+                        .trim()
+                        .chars()
+                        .filter(|c| c.is_alphabetic())
+                        .collect::<String>()
+                        .to_uppercase()
+                };
+
+                let (radius, color) = element_properties(&element);
+
+                atoms.push(Atom {
+                    position: [x, y, z],
+                    radius,
+                    color,
+                    element,
+                });
+            }
+
+            if line.starts_with("CONECT") {
+                let parts: Vec<usize> = line[6..]
+                    .split_whitespace()
+                    .filter_map(|s| s.parse::<usize>().ok())
+                    .collect();
+
+                if parts.len() >= 2 {
+                    let origin = parts[0] - 1;
+                    for &partner in &parts[1..] {
+                        let partner_idx = partner - 1;
+
+                        if origin < partner_idx {
+                            bonds.push(Bond {
+                                atom_a: origin,
+                                atom_b: partner_idx,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        let center_of_mass = if atoms.is_empty() {
+            [0.0, 0.0, 0.0]
+        } else {
+            let sum = atoms.iter().fold([0.0f32; 3], |acc, a| {
+                [
+                    acc[0] + a.position[0],
+                    acc[1] + a.position[1],
+                    acc[2] + a.position[2],
+                ]
+            });
+            let n = atoms.len() as f32;
+            [sum[0] / n, sum[1] / n, sum[2] / n]
+        };
+
+        MoleculeData {
+            atoms,
+            bonds,
+            center_of_mass,
+        }
     }
 }
 
