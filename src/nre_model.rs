@@ -2,11 +2,13 @@ use crate::nre_device::NreDevice;
 use ash::vk;
 use tobj;
 
+// struct!
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
 }
 
+// IMPL
 impl Vertex {
     pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
         vec![vk::VertexInputBindingDescription {
@@ -16,6 +18,7 @@ impl Vertex {
         }]
     }
 
+    // FUNC: _ -> Vertex Input Attribute Description
     pub fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
         vec![
             vk::VertexInputAttributeDescription {
@@ -36,7 +39,7 @@ impl Vertex {
 
 // molecular data structures
 
-// STRUCT
+// struct!
 pub struct Atom {
     pub position: [f32; 3],
     pub radius: f32,
@@ -44,13 +47,54 @@ pub struct Atom {
     pub element: String,
 }
 
-// STRUCT
+// struct!
+pub struct AtomInstance {
+    pub position: [f32; 3],
+    pub radius: f32,
+    pub color: [f32; 3],
+}
+
+// IMPL Atom Instance
+impl AtomInstance {
+    pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
+        vec![vk::VertexInputBindingDescription {
+            binding: 1,
+            stride: std::mem::size_of::<AtomInstance>() as u32,
+            input_rate: vk::VertexInputRate::INSTANCE,
+        }]
+    }
+
+    pub fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
+        vec![
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 2,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 0,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 3,
+                format: vk::Format::R32_SFLOAT,
+                offset: 12,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 1,
+                location: 4,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 16,
+            },
+        ]
+    }
+}
+
+// struct!
 pub struct Bond {
     pub atom_a: usize,
     pub atom_b: usize,
 }
 
-// STRUCT
+// struct!
 pub struct MoleculeData {
     pub atoms: Vec<Atom>,
     pub bonds: Vec<Bond>,
@@ -69,6 +113,7 @@ fn element_properties(element: &str) -> (f32, [f32; 3]) {
     }
 }
 
+// struct!
 pub struct NreModel {
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
