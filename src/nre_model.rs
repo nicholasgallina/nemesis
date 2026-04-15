@@ -115,12 +115,12 @@ fn element_properties(element: &str) -> (f32, [f32; 3]) {
 
 // !struct
 pub struct NreModel {
-    vertex_buffer: vk::Buffer,
-    vertex_buffer_memory: vk::DeviceMemory,
-    vertex_count: u32,
-    instance_buffer: Option<vk::Buffer>,
-    instance_buffer_memory: Option<vk::DeviceMemory>,
-    instance_count: u32,
+    pub vertex_buffer: vk::Buffer,
+    pub vertex_buffer_memory: vk::DeviceMemory,
+    pub vertex_count: u32,
+    pub instance_buffer: Option<vk::Buffer>,
+    pub instance_buffer_memory: Option<vk::DeviceMemory>,
+    pub instance_count: u32,
     device: ash::Device,
 }
 // !impl
@@ -136,6 +136,16 @@ impl NreModel {
             instance_buffer_memory: None,
             instance_count: 0,
         }
+    }
+
+    // !fn
+    pub fn instance_buffer(&self) -> Option<vk::Buffer> {
+        self.instance_buffer
+    }
+
+    // !fn
+    pub fn instance_count(&self) -> u32 {
+        self.instance_count
     }
 
     // !fn

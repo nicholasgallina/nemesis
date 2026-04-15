@@ -223,6 +223,10 @@ impl NreRenderer {
         self.pipeline.pipeline_layout()
     }
 
+    pub fn render_pass(&self) -> vk::RenderPass {
+        self.swap_chain.render_pass()
+    }
+
     pub fn current_frame_index(&self) -> usize {
         self.current_frame_index
     }

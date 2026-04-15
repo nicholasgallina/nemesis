@@ -3,6 +3,7 @@ use crate::nre_descriptor::{NreDescriptorPool, NreDescriptorSetLayout, NreUnifor
 use crate::nre_device::NreDevice;
 use crate::nre_game_object::NreGameObject;
 use crate::nre_model::NreModel;
+use crate::nre_pipeline::NrePipeline;
 use crate::nre_renderer::NreRenderer;
 use crate::nre_window::NreWindow;
 use ash::vk;
@@ -26,6 +27,8 @@ pub struct FirstApp {
     camera: crate::nre_camera::PerspectiveCamera,
     controller: crate::nre_controller::Controller,
     keys: std::collections::HashSet<winit::keyboard::KeyCode>,
+    molecule_model: Option<NreModel>,
+    molecule_pipeline: Option<NrePipeline>,
 }
 
 impl FirstApp {
@@ -52,6 +55,13 @@ impl FirstApp {
         obj1.scale = glam::Vec3::splat(0.5);
         let game_objects = vec![obj1];
 
+        let molecule_data = NreModel::from_pdb("models/molecule.pdb");
+        let molecule_model = NreModel::from_molecule(&nre_device, &molecule_data);
+        let molecule_pipeline = NrePipeline::new_molecular(
+            &nre_device,
+            nre_renderer.render_pass(),
+            descriptor_set_layout.layout(),
+        );
         let start_time = std::time::Instant::now();
 
         for i in 0..2 {
@@ -90,6 +100,8 @@ impl FirstApp {
             camera,
             controller,
             keys,
+            molecule_model: Some(molecule_model),
+            molecule_pipeline: Some(molecule_pipeline),
         }
     }
 
@@ -175,6 +187,30 @@ impl FirstApp {
                                     cmd,
                                     obj.model.vertex_count(),
                                     1,
+                                    0,
+                                    0,
+                                );
+                            }
+
+                            // molecule
+                            if let (Some(mol_model), Some(mol_pipeline)) =
+                                (&self.molecule_model, &self.molecule_pipeline)
+                            {
+                                self.nre_device.device().cmd_bind_pipeline(
+                                    cmd,
+                                    vk::PipelineBindPoint::GRAPHICS,
+                                    mol_pipeline.pipeline(),
+                                );
+                                self.nre_device.device().cmd_bind_vertex_buffers(
+                                    cmd,
+                                    1,
+                                    &[mol_model.instance_buffer.unwrap()],
+                                    &[0],
+                                );
+                                self.nre_device.device().cmd_draw(
+                                    cmd,
+                                    6,
+                                    mol_model.instance_count,
                                     0,
                                     0,
                                 );
