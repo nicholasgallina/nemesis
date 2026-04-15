@@ -2,7 +2,7 @@ use crate::nre_device::NreDevice;
 use ash::vk;
 use tobj;
 
-// struct!
+// !struct
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
@@ -39,7 +39,7 @@ impl Vertex {
 
 // molecular data structures
 
-// struct!
+// !struct
 pub struct Atom {
     pub position: [f32; 3],
     pub radius: f32,
@@ -47,7 +47,7 @@ pub struct Atom {
     pub element: String,
 }
 
-// struct!
+// !struct
 pub struct AtomInstance {
     pub position: [f32; 3],
     pub radius: f32,
@@ -88,13 +88,13 @@ impl AtomInstance {
     }
 }
 
-// struct!
+// !struct
 pub struct Bond {
     pub atom_a: usize,
     pub atom_b: usize,
 }
 
-// struct!
+// !struct
 pub struct MoleculeData {
     pub atoms: Vec<Atom>,
     pub bonds: Vec<Bond>,
@@ -113,14 +113,17 @@ fn element_properties(element: &str) -> (f32, [f32; 3]) {
     }
 }
 
-// struct!
+// !struct
 pub struct NreModel {
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
     vertex_count: u32,
+    instance_buffer: Option<vk::Buffer>,
+    instance_buffer_memory: Option<vk::DeviceMemory>,
+    instance_count: u32,
     device: ash::Device,
 }
-
+// !impl
 impl NreModel {
     pub fn new(device: &NreDevice, vertices: &[Vertex]) -> Self {
         let (vertex_buffer, vertex_buffer_memory) = Self::create_vertex_buffer(device, vertices);
@@ -129,9 +132,13 @@ impl NreModel {
             vertex_buffer_memory,
             vertex_count: vertices.len() as u32,
             device: device.device().clone(),
+            instance_buffer: None,
+            instance_buffer_memory: None,
+            instance_count: 0,
         }
     }
 
+    // !fn
     fn create_vertex_buffer(
         device: &NreDevice,
         vertices: &[Vertex],
@@ -322,14 +329,91 @@ impl NreModel {
             center_of_mass,
         }
     }
+
+    // !fn
+    pub fn from_molecule(device: &NreDevice, molecule: &MoleculeData) -> Self {
+        let instances: Vec<AtomInstance> = molecule
+            .atoms
+            .iter()
+            .map(|a| AtomInstance {
+                position: a.position,
+                radius: a.radius,
+                color: a.color,
+            })
+            .collect();
+
+        let size: u64 = (std::mem::size_of::<AtomInstance>() * instances.len()) as u64;
+
+        let buffer_info = vk::BufferCreateInfo {
+            size,
+            usage: vk::BufferUsageFlags::VERTEX_BUFFER,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+
+        let buffer = unsafe { device.device().create_buffer(&buffer_info, None).unwrap() };
+
+        let mem_requirements = unsafe { device.device().get_buffer_memory_requirements(buffer) };
+
+        let alloc_info = vk::MemoryAllocateInfo {
+            allocation_size: mem_requirements.size,
+            memory_type_index: Self::find_memory_type(device, mem_requirements.memory_type_bits),
+            ..Default::default()
+        };
+
+        let memory = unsafe { device.device().allocate_memory(&alloc_info, None).unwrap() };
+
+        unsafe {
+            device
+                .device()
+                .bind_buffer_memory(buffer, memory, 0)
+                .unwrap()
+        };
+
+        let data_ptr = unsafe {
+            device
+                .device()
+                .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
+                .unwrap()
+        } as *mut AtomInstance;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                instances.as_ptr(),
+                data_ptr as *mut AtomInstance,
+                instances.len(),
+            );
+            device.device().unmap_memory(memory);
+        }
+
+        Self {
+            vertex_buffer: vk::Buffer::null(),
+            vertex_buffer_memory: vk::DeviceMemory::null(),
+            vertex_count: 0,
+            instance_buffer: Some(buffer),
+            instance_buffer_memory: Some(memory),
+            instance_count: instances.len() as u32,
+            device: device.device().clone(),
+        }
+    }
 }
 
 // override! DROP
 impl Drop for NreModel {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_buffer(self.vertex_buffer, None);
-            self.device.free_memory(self.vertex_buffer_memory, None);
+            if self.vertex_count > 0 {
+                self.device.destroy_buffer(self.vertex_buffer, None);
+                self.device.free_memory(self.vertex_buffer_memory, None);
+            }
+
+            if let Some(buf) = self.instance_buffer {
+                self.device.destroy_buffer(buf, None);
+            }
+
+            if let Some(mem) = self.instance_buffer_memory {
+                self.device.free_memory(mem, None);
+            }
         }
     }
 }
