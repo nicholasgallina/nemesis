@@ -1,7 +1,7 @@
 use crate::first_app::PushConstantData;
 use crate::nre_device::NreDevice;
-use crate::nre_model::Vertex;
-use ash::vk;
+use crate::nre_model::{AtomInstance, Vertex};
+use ash::vk::{self, RenderPass};
 use std::ffi::CString;
 
 pub struct NrePipeline {
@@ -17,7 +17,51 @@ impl NrePipeline {
         descriptor_set_layout: vk::DescriptorSetLayout,
     ) -> Self {
         let pipeline_layout = Self::create_pipeline_layout(device.device(), descriptor_set_layout);
-        let pipeline = Self::create_pipeline(device.device(), render_pass, pipeline_layout);
+
+        let binding_descriptions = Vertex::get_binding_descriptions();
+        let attribute_descriptions = Vertex::get_attribute_descriptions();
+
+        let pipeline = Self::create_pipeline(
+            device.device(),
+            render_pass,
+            pipeline_layout,
+            "shaders/simple.vert.spv",
+            "shaders/simple.frag.spv",
+            &binding_descriptions,
+            &attribute_descriptions,
+        );
+
+        Self {
+            pipeline,
+            pipeline_layout,
+            device: device.device().clone(),
+        }
+    }
+
+    // !fn
+    pub fn new_molecular(
+        device: &NreDevice,
+        render_pass: vk::RenderPass,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> Self {
+        let pipeline_layout = Self::create_pipeline_layout(device.device(), descriptor_set_layout);
+
+        let mut binding_descriptions = Vertex::get_binding_descriptions();
+        binding_descriptions.extend(AtomInstance::get_binding_descriptions());
+
+        let mut attribute_descriptions = Vertex::get_attribute_descriptions();
+        attribute_descriptions.extend(AtomInstance::get_attribute_descriptions());
+
+        let pipeline = Self::create_pipeline(
+            device.device(),
+            render_pass,
+            pipeline_layout,
+            "shaders/atom.vert.spv",
+            "shaders/atom.frag.spv",
+            &binding_descriptions,
+            &attribute_descriptions,
+        );
+
         Self {
             pipeline,
             pipeline_layout,
@@ -52,13 +96,18 @@ impl NrePipeline {
         unsafe { device.create_pipeline_layout(&layout_info, None).unwrap() }
     }
 
+    // !fn
     fn create_pipeline(
         device: &ash::Device,
         render_pass: vk::RenderPass,
         pipeline_layout: vk::PipelineLayout,
+        vert_path: &str,
+        frag_path: &str,
+        binding_descriptions: &[vk::VertexInputBindingDescription],
+        attribute_descriptions: &[vk::VertexInputAttributeDescription],
     ) -> vk::Pipeline {
-        let vert_code = Self::read_shader("shaders/simple.vert.spv");
-        let frag_code = Self::read_shader("shaders/simple.frag.spv");
+        let vert_code = Self::read_shader(vert_path);
+        let frag_code = Self::read_shader(frag_path);
 
         let vert_module = Self::create_shader_module(device, &vert_code);
         let frag_module = Self::create_shader_module(device, &frag_code);
@@ -80,8 +129,6 @@ impl NrePipeline {
             },
         ];
 
-        let binding_descriptions = Vertex::get_binding_descriptions();
-        let attribute_descriptions = Vertex::get_attribute_descriptions();
         let vertex_input = vk::PipelineVertexInputStateCreateInfo {
             vertex_binding_description_count: binding_descriptions.len() as u32,
             p_vertex_binding_descriptions: binding_descriptions.as_ptr(),
