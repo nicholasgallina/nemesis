@@ -18,7 +18,6 @@ impl Vertex {
         }]
     }
 
-    // FUNC: _ -> Vertex Input Attribute Description
     pub fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
         vec![
             vk::VertexInputAttributeDescription {
@@ -37,8 +36,6 @@ impl Vertex {
     }
 }
 
-// molecular data structures
-
 // !struct
 pub struct Atom {
     pub position: [f32; 3],
@@ -54,7 +51,7 @@ pub struct AtomInstance {
     pub color: [f32; 3],
 }
 
-// !impl Atom Instance
+// !impl
 impl AtomInstance {
     pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
         vec![vk::VertexInputBindingDescription {
@@ -103,22 +100,21 @@ pub struct MoleculeData {
 
 fn element_properties(element: &str) -> (f32, [f32; 3]) {
     match element {
-        "H" => (1.20, [1.00, 1.00, 1.00]), // white
-        "C" => (1.70, [0.50, 0.50, 0.50]), // grey
-        "N" => (1.55, [0.13, 0.47, 0.71]), // blue
-        "O" => (1.52, [0.84, 0.18, 0.18]), // red
-        "S" => (1.80, [1.00, 0.78, 0.20]), // yellow
-        "P" => (1.80, [1.00, 0.50, 0.00]), // orange
-        _ => (1.50, [0.70, 0.70, 0.70]),   // fallback: grey
+        "H" => (1.20, [1.00, 1.00, 1.00]),
+        "C" => (1.70, [0.50, 0.50, 0.50]),
+        "N" => (1.55, [0.13, 0.47, 0.71]),
+        "O" => (1.52, [0.84, 0.18, 0.18]),
+        "S" => (1.80, [1.00, 0.78, 0.20]),
+        "P" => (1.80, [1.00, 0.50, 0.00]),
+        _ => (1.50, [0.70, 0.70, 0.70]),
     }
 }
 
-// !fn -> Vec<Vertex> sphere mesh
-fn generate_sphere(stacks: u32, slices: u32) -> Vec<Vertex> {
+fn generate_sphere(stacks: u32, slices: u32) -> (Vec<Vertex>, Vec<u32>) {
     let mut vertices = Vec::new();
 
-    for i in 0..stacks {
-        for j in 0..slices {
+    for i in 0..=stacks {
+        for j in 0..=slices {
             let stack_angle = std::f32::consts::PI * i as f32 / stacks as f32;
             let slice_angle = 2.0 * std::f32::consts::PI * j as f32 / slices as f32;
 
@@ -133,7 +129,25 @@ fn generate_sphere(stacks: u32, slices: u32) -> Vec<Vertex> {
         }
     }
 
-    vertices
+    let mut indices: Vec<u32> = Vec::new();
+
+    for i in 0..stacks {
+        for j in 0..slices {
+            let top_left = i * (slices + 1) + j;
+            let top_right = top_left + 1;
+            let bottom_left = top_left + (slices + 1);
+            let bottom_right = bottom_left + 1;
+
+            indices.push(top_left);
+            indices.push(bottom_left);
+            indices.push(top_right);
+            indices.push(top_right);
+            indices.push(bottom_left);
+            indices.push(bottom_right);
+        }
+    }
+
+    (vertices, indices)
 }
 
 // !struct
@@ -144,8 +158,12 @@ pub struct NreModel {
     pub instance_buffer: Option<vk::Buffer>,
     pub instance_buffer_memory: Option<vk::DeviceMemory>,
     pub instance_count: u32,
+    pub index_buffer: Option<vk::Buffer>,
+    pub index_buffer_memory: Option<vk::DeviceMemory>,
+    pub index_count: u32,
     device: ash::Device,
 }
+
 // !impl
 impl NreModel {
     pub fn new(device: &NreDevice, vertices: &[Vertex]) -> Self {
@@ -158,20 +176,28 @@ impl NreModel {
             instance_buffer: None,
             instance_buffer_memory: None,
             instance_count: 0,
+            index_buffer: None,
+            index_buffer_memory: None,
+            index_count: 0,
         }
     }
 
-    // !fn
     pub fn instance_buffer(&self) -> Option<vk::Buffer> {
         self.instance_buffer
     }
 
-    // !fn
     pub fn instance_count(&self) -> u32 {
         self.instance_count
     }
 
-    // !fn
+    pub fn index_buffer(&self) -> Option<vk::Buffer> {
+        self.index_buffer
+    }
+
+    pub fn index_count(&self) -> u32 {
+        self.index_count
+    }
+
     fn create_vertex_buffer(
         device: &NreDevice,
         vertices: &[Vertex],
@@ -191,21 +217,18 @@ impl NreModel {
             ..Default::default()
         };
         let memory = unsafe { device.device().allocate_memory(&alloc_info, None).unwrap() };
-
         unsafe {
             device
                 .device()
                 .bind_buffer_memory(buffer, memory, 0)
                 .unwrap()
         };
-
         let data_ptr = unsafe {
             device
                 .device()
                 .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
                 .unwrap()
         };
-
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vertices.as_ptr(),
@@ -214,7 +237,41 @@ impl NreModel {
             );
             device.device().unmap_memory(memory);
         }
+        (buffer, memory)
+    }
 
+    fn create_index_buffer(device: &NreDevice, indices: &[u32]) -> (vk::Buffer, vk::DeviceMemory) {
+        let size = (std::mem::size_of::<u32>() * indices.len()) as u64;
+        let buffer_info = vk::BufferCreateInfo {
+            size,
+            usage: vk::BufferUsageFlags::INDEX_BUFFER,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        let buffer = unsafe { device.device().create_buffer(&buffer_info, None).unwrap() };
+        let mem_requirements = unsafe { device.device().get_buffer_memory_requirements(buffer) };
+        let alloc_info = vk::MemoryAllocateInfo {
+            allocation_size: mem_requirements.size,
+            memory_type_index: Self::find_memory_type(device, mem_requirements.memory_type_bits),
+            ..Default::default()
+        };
+        let memory = unsafe { device.device().allocate_memory(&alloc_info, None).unwrap() };
+        unsafe {
+            device
+                .device()
+                .bind_buffer_memory(buffer, memory, 0)
+                .unwrap()
+        };
+        let data_ptr = unsafe {
+            device
+                .device()
+                .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
+                .unwrap()
+        } as *mut u32;
+        unsafe {
+            std::ptr::copy_nonoverlapping(indices.as_ptr(), data_ptr, indices.len());
+            device.device().unmap_memory(memory);
+        }
         (buffer, memory)
     }
 
@@ -246,7 +303,6 @@ impl NreModel {
         self.vertex_count
     }
 
-    // FUNC: device + path -> NreModel
     pub fn from_obj(device: &NreDevice, path: &str) -> Self {
         let (models, _) = tobj::load_obj(
             path,
@@ -256,10 +312,8 @@ impl NreModel {
             },
         )
         .unwrap();
-
         let mesh = &models[0].mesh;
         let mut vertices = vec![];
-
         for i in 0..mesh.indices.len() {
             let idx = mesh.indices[i] as usize;
             let pos = [
@@ -282,24 +336,19 @@ impl NreModel {
                 normal,
             });
         }
-
         Self::new(device, &vertices)
     }
 
-    // FUNC: path -> MoleculeData
     pub fn from_pdb(path: &str) -> MoleculeData {
         let contents = std::fs::read_to_string(path)
             .unwrap_or_else(|_| panic!("ERROR: can't read PDB file: {}", path));
-
         let mut atoms: Vec<Atom> = Vec::new();
         let mut bonds: Vec<Bond> = Vec::new();
-
         for line in contents.lines() {
             if line.starts_with("ATOM  ") || line.starts_with("HETATM") {
                 let x: f32 = line[30..38].trim().parse().unwrap_or(0.0);
                 let y: f32 = line[38..46].trim().parse().unwrap_or(0.0);
                 let z: f32 = line[46..54].trim().parse().unwrap_or(0.0);
-
                 let element = if line.len() >= 78 {
                     line[76..78].trim().to_uppercase()
                 } else {
@@ -310,9 +359,7 @@ impl NreModel {
                         .collect::<String>()
                         .to_uppercase()
                 };
-
                 let (radius, color) = element_properties(&element);
-
                 atoms.push(Atom {
                     position: [x, y, z],
                     radius,
@@ -320,18 +367,15 @@ impl NreModel {
                     element,
                 });
             }
-
             if line.starts_with("CONECT") {
                 let parts: Vec<usize> = line[6..]
                     .split_whitespace()
                     .filter_map(|s| s.parse::<usize>().ok())
                     .collect();
-
                 if parts.len() >= 2 {
                     let origin = parts[0] - 1;
                     for &partner in &parts[1..] {
                         let partner_idx = partner - 1;
-
                         if origin < partner_idx {
                             bonds.push(Bond {
                                 atom_a: origin,
@@ -355,7 +399,6 @@ impl NreModel {
             let n = atoms.len() as f32;
             [sum[0] / n, sum[1] / n, sum[2] / n]
         };
-
         MoleculeData {
             atoms,
             bonds,
@@ -363,11 +406,13 @@ impl NreModel {
         }
     }
 
-    // !fn
     pub fn from_molecule(device: &NreDevice, molecule: &MoleculeData) -> Self {
-        let sphere_vertices = generate_sphere(16, 16);
+        let (sphere_vertices, sphere_indices) = generate_sphere(16, 16);
         let (vertex_buffer, vertex_buffer_memory) =
             Self::create_vertex_buffer(device, &sphere_vertices);
+        let (index_buffer, index_buffer_memory) =
+            Self::create_index_buffer(device, &sphere_indices);
+
         let instances: Vec<AtomInstance> = molecule
             .atoms
             .iter()
@@ -378,47 +423,35 @@ impl NreModel {
             })
             .collect();
 
-        let size: u64 = (std::mem::size_of::<AtomInstance>() * instances.len()) as u64;
-
+        let size = (std::mem::size_of::<AtomInstance>() * instances.len()) as u64;
         let buffer_info = vk::BufferCreateInfo {
             size,
             usage: vk::BufferUsageFlags::VERTEX_BUFFER,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             ..Default::default()
         };
-
         let buffer = unsafe { device.device().create_buffer(&buffer_info, None).unwrap() };
-
         let mem_requirements = unsafe { device.device().get_buffer_memory_requirements(buffer) };
-
         let alloc_info = vk::MemoryAllocateInfo {
             allocation_size: mem_requirements.size,
             memory_type_index: Self::find_memory_type(device, mem_requirements.memory_type_bits),
             ..Default::default()
         };
-
         let memory = unsafe { device.device().allocate_memory(&alloc_info, None).unwrap() };
-
         unsafe {
             device
                 .device()
                 .bind_buffer_memory(buffer, memory, 0)
                 .unwrap()
         };
-
         let data_ptr = unsafe {
             device
                 .device()
                 .map_memory(memory, 0, size, vk::MemoryMapFlags::empty())
                 .unwrap()
         } as *mut AtomInstance;
-
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                instances.as_ptr(),
-                data_ptr as *mut AtomInstance,
-                instances.len(),
-            );
+            std::ptr::copy_nonoverlapping(instances.as_ptr(), data_ptr, instances.len());
             device.device().unmap_memory(memory);
         }
 
@@ -429,6 +462,9 @@ impl NreModel {
             instance_buffer: Some(buffer),
             instance_buffer_memory: Some(memory),
             instance_count: instances.len() as u32,
+            index_buffer: Some(index_buffer),
+            index_buffer_memory: Some(index_buffer_memory),
+            index_count: sphere_indices.len() as u32,
             device: device.device().clone(),
         }
     }
@@ -442,12 +478,16 @@ impl Drop for NreModel {
                 self.device.destroy_buffer(self.vertex_buffer, None);
                 self.device.free_memory(self.vertex_buffer_memory, None);
             }
-
             if let Some(buf) = self.instance_buffer {
                 self.device.destroy_buffer(buf, None);
             }
-
             if let Some(mem) = self.instance_buffer_memory {
+                self.device.free_memory(mem, None);
+            }
+            if let Some(buf) = self.index_buffer {
+                self.device.destroy_buffer(buf, None);
+            }
+            if let Some(mem) = self.index_buffer_memory {
                 self.device.free_memory(mem, None);
             }
         }
