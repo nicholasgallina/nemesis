@@ -8,7 +8,7 @@ pub struct Vertex {
     pub normal: [f32; 3],
 }
 
-// IMPL
+// !impl
 impl Vertex {
     pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
         vec![vk::VertexInputBindingDescription {
@@ -54,7 +54,7 @@ pub struct AtomInstance {
     pub color: [f32; 3],
 }
 
-// IMPL Atom Instance
+// !impl Atom Instance
 impl AtomInstance {
     pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
         vec![vk::VertexInputBindingDescription {
@@ -111,6 +111,29 @@ fn element_properties(element: &str) -> (f32, [f32; 3]) {
         "P" => (1.80, [1.00, 0.50, 0.00]), // orange
         _ => (1.50, [0.70, 0.70, 0.70]),   // fallback: grey
     }
+}
+
+// !fn -> Vec<Vertex> sphere mesh
+fn generate_sphere(stacks: u32, slices: u32) -> Vec<Vertex> {
+    let mut vertices = Vec::new();
+
+    for i in 0..stacks {
+        for j in 0..slices {
+            let stack_angle = std::f32::consts::PI * i as f32 / stacks as f32;
+            let slice_angle = 2.0 * std::f32::consts::PI * j as f32 / slices as f32;
+
+            let x = stack_angle.sin() * slice_angle.cos();
+            let y = stack_angle.cos();
+            let z = stack_angle.sin() * slice_angle.sin();
+
+            vertices.push(Vertex {
+                position: [x, y, z],
+                normal: [x, y, z],
+            });
+        }
+    }
+
+    vertices
 }
 
 // !struct
@@ -342,6 +365,9 @@ impl NreModel {
 
     // !fn
     pub fn from_molecule(device: &NreDevice, molecule: &MoleculeData) -> Self {
+        let sphere_vertices = generate_sphere(16, 16);
+        let (vertex_buffer, vertex_buffer_memory) =
+            Self::create_vertex_buffer(device, &sphere_vertices);
         let instances: Vec<AtomInstance> = molecule
             .atoms
             .iter()
@@ -397,9 +423,9 @@ impl NreModel {
         }
 
         Self {
-            vertex_buffer: vk::Buffer::null(),
-            vertex_buffer_memory: vk::DeviceMemory::null(),
-            vertex_count: 0,
+            vertex_buffer,
+            vertex_buffer_memory,
+            vertex_count: sphere_vertices.len() as u32,
             instance_buffer: Some(buffer),
             instance_buffer_memory: Some(memory),
             instance_count: instances.len() as u32,

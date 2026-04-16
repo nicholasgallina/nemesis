@@ -201,16 +201,24 @@ impl FirstApp {
                                     vk::PipelineBindPoint::GRAPHICS,
                                     mol_pipeline.pipeline(),
                                 );
+                                // binding 0 — sphere geometry
+                                self.nre_device.device().cmd_bind_vertex_buffers(
+                                    cmd,
+                                    0,
+                                    &[mol_model.vertex_buffer()],
+                                    &[0],
+                                );
+                                // binding 1 — atom instance data
                                 self.nre_device.device().cmd_bind_vertex_buffers(
                                     cmd,
                                     1,
-                                    &[mol_model.instance_buffer.unwrap()],
+                                    &[mol_model.instance_buffer().unwrap()],
                                     &[0],
                                 );
                                 self.nre_device.device().cmd_draw(
                                     cmd,
-                                    6,
-                                    mol_model.instance_count,
+                                    mol_model.vertex_count(),
+                                    mol_model.instance_count(),
                                     0,
                                     0,
                                 );
