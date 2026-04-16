@@ -15,7 +15,7 @@ impl NreWindow {
         let window = WindowBuilder::new()
             .with_title("Nemesis")
             .with_inner_size(winit::dpi::LogicalSize::new(width, height))
-            .with_resizable(false)
+            .with_resizable(true)
             .build(&event_loop)
             .unwrap();
 

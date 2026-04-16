@@ -16,6 +16,10 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 layout(location = 0) out vec3 fragColor;
 
 void main() {
-    gl_Position = ubo.vp * vec4(inPosition * atomRadius + atomPos, 1.0);
+    float worldScale = 0.05;
+    float radiusScale = 0.06;
+    vec3 worldPos = atomPos * worldScale;
+    vec3 sphereVertex = inPosition * (atomRadius * radiusScale);
+    gl_Position = ubo.vp * vec4(sphereVertex + worldPos, 1.0);
     fragColor = color;
 }

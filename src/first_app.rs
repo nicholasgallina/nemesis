@@ -109,12 +109,14 @@ impl FirstApp {
         let event_loop = self.nre_window.event_loop;
         event_loop
             .run(move |event, elwt| match event {
+                // !event: close window
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     ..
                 } => {
                     elwt.exit();
                 }
+                // !
                 Event::WindowEvent {
                     event: WindowEvent::KeyboardInput { event, .. },
                     ..
@@ -132,6 +134,20 @@ impl FirstApp {
                     event: WindowEvent::RedrawRequested,
                     ..
                 } => {
+                    // check for stale swapchain first
+                    if self.nre_renderer.needs_resize() {
+                        let size = self.nre_window.window.inner_size();
+                        let new_extent = vk::Extent2D {
+                            width: size.width,
+                            height: size.height,
+                        };
+                        self.nre_renderer.recreate_swapchain(
+                            &self.nre_device,
+                            new_extent,
+                            self.descriptor_set_layout.layout(),
+                        );
+                    }
+
                     if let Some(cmd) = self.nre_renderer.begin_frame(&self.nre_device) {
                         self.nre_renderer.begin_render_pass(cmd, &self.nre_device);
                         let time = self.start_time.elapsed().as_secs_f32();
@@ -192,7 +208,6 @@ impl FirstApp {
                                 );
                             }
 
-                            // molecule
                             if let (Some(mol_model), Some(mol_pipeline)) =
                                 (&self.molecule_model, &self.molecule_pipeline)
                             {
@@ -201,28 +216,24 @@ impl FirstApp {
                                     vk::PipelineBindPoint::GRAPHICS,
                                     mol_pipeline.pipeline(),
                                 );
-                                // binding 0 sphere geometry
                                 self.nre_device.device().cmd_bind_vertex_buffers(
                                     cmd,
                                     0,
                                     &[mol_model.vertex_buffer()],
                                     &[0],
                                 );
-                                // binding 1 atom instance data
                                 self.nre_device.device().cmd_bind_vertex_buffers(
                                     cmd,
                                     1,
                                     &[mol_model.instance_buffer().unwrap()],
                                     &[0],
                                 );
-                                // index buffer
                                 self.nre_device.device().cmd_bind_index_buffer(
                                     cmd,
                                     mol_model.index_buffer().unwrap(),
                                     0,
                                     vk::IndexType::UINT32,
                                 );
-                                // draw indexed
                                 self.nre_device.device().cmd_draw_indexed(
                                     cmd,
                                     mol_model.index_count(),
@@ -239,6 +250,22 @@ impl FirstApp {
                 }
                 Event::AboutToWait => {
                     self.nre_window.window.request_redraw();
+                }
+                // !event: window resize
+                Event::WindowEvent {
+                    event: WindowEvent::Resized(size),
+                    ..
+                } => {
+                    let new_extent = vk::Extent2D {
+                        width: size.width,
+                        height: size.height,
+                    };
+                    self.nre_renderer.recreate_swapchain(
+                        &self.nre_device,
+                        new_extent,
+                        self.descriptor_set_layout.layout(),
+                    );
+                    self.camera.aspect_ratio = size.width as f32 / size.height as f32;
                 }
                 _ => {}
             })

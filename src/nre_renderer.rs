@@ -10,6 +10,7 @@ pub struct NreRenderer {
     current_image_index: u32,
     current_frame_index: usize,
     is_frame_started: bool,
+    needs_resize: bool,
 }
 
 impl NreRenderer {
@@ -28,6 +29,7 @@ impl NreRenderer {
             current_image_index: 0,
             current_frame_index: 0,
             is_frame_started: false,
+            needs_resize: false,
         }
     }
 
@@ -60,6 +62,10 @@ impl NreRenderer {
 
         let image_index = match result {
             Ok((index, _)) => index,
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                self.needs_resize = true;
+                return None;
+            }
             Err(_) => return None,
         };
 
@@ -82,6 +88,25 @@ impl NreRenderer {
         }
 
         Some(cmd)
+    }
+
+    // !fn
+    pub fn needs_resize(&self) -> bool {
+        self.needs_resize
+    }
+
+    // !fn -> Swapchain
+    pub fn recreate_swapchain(
+        &mut self,
+        device: &NreDevice,
+        new_extent: vk::Extent2D,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) {
+        unsafe { device.device().device_wait_idle().unwrap() };
+        self.swap_chain = NreSwapChain::new(device, new_extent);
+        self.pipeline =
+            NrePipeline::new(device, self.swap_chain.render_pass(), descriptor_set_layout);
+        self.needs_resize = false;
     }
 
     pub fn end_frame(&mut self, device: &NreDevice) {
@@ -130,12 +155,17 @@ impl NreRenderer {
             p_image_indices: indices.as_ptr(),
             ..Default::default()
         };
-
-        unsafe {
+        let present_result = unsafe {
             self.swap_chain
                 .swapchain_loader
                 .queue_present(device.graphics_queue(), &present_info)
-                .unwrap();
+        };
+        match present_result {
+            Ok(_) => {}
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
+                self.needs_resize = true;
+            }
+            Err(e) => panic!("ERROR: queue_present failed {:?}", e),
         }
 
         self.current_frame_index = (self.current_frame_index + 1) % 2;
