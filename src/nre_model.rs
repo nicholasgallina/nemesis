@@ -1,5 +1,6 @@
 use crate::nre_device::NreDevice;
 use ash::vk;
+use glam;
 use tobj;
 
 // !struct
@@ -49,6 +50,49 @@ pub struct AtomInstance {
     pub position: [f32; 3],
     pub radius: f32,
     pub color: [f32; 3],
+}
+
+// !struct
+pub struct BondInstance {
+    pub start: [f32; 3],
+    pub end: [f32; 3],
+    pub color: [f32; 3],
+}
+
+// !impl
+impl BondInstance {
+    // !fn
+    pub fn get_binding_descriptions() -> Vec<vk::VertexInputBindingDescription> {
+        vec![vk::VertexInputBindingDescription {
+            binding: 2,
+            stride: std::mem::size_of::<BondInstance>() as u32,
+            input_rate: vk::VertexInputRate::INSTANCE,
+        }]
+    }
+
+    // !fn
+    pub fn get_attribute_descriptions() -> Vec<vk::VertexInputAttributeDescription> {
+        vec![
+            vk::VertexInputAttributeDescription {
+                binding: 2,
+                location: 5,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 0,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 2,
+                location: 6,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 12,
+            },
+            vk::VertexInputAttributeDescription {
+                binding: 2,
+                location: 7,
+                format: vk::Format::R32G32B32_SFLOAT,
+                offset: 24,
+            },
+        ]
+    }
 }
 
 // !impl
@@ -110,6 +154,25 @@ fn element_properties(element: &str) -> (f32, [f32; 3]) {
     }
 }
 
+fn infer_bonds(atoms: &[Atom]) -> Vec<Bond> {
+    let mut bonds = Vec::new();
+
+    for i in 0..atoms.len() {
+        for j in (i + 1)..atoms.len() {
+            let a = glam::Vec3::from(atoms[i].position);
+            let b = glam::Vec3::from(atoms[j].position);
+
+            if a.distance(b) < 1.9 {
+                bonds.push(Bond {
+                    atom_a: i,
+                    atom_b: j,
+                });
+            }
+        }
+    }
+    bonds
+}
+
 fn generate_sphere(stacks: u32, slices: u32) -> (Vec<Vertex>, Vec<u32>) {
     let mut vertices = Vec::new();
 
@@ -150,6 +213,43 @@ fn generate_sphere(stacks: u32, slices: u32) -> (Vec<Vertex>, Vec<u32>) {
     (vertices, indices)
 }
 
+// !fn
+fn generate_cylinder(stacks: u32, slices: u32) -> (Vec<Vertex>, Vec<u32>) {
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    for i in 0..=stacks {
+        let y = (i as f32 / stacks as f32) - 0.5;
+        for j in 0..=slices {
+            let angle = 2.0 * std::f32::consts::PI * j as f32 / slices as f32;
+            let x = angle.cos();
+            let z = angle.sin();
+            vertices.push(Vertex {
+                position: [x, y, z],
+                normal: [x, 0.0, z],
+            });
+        }
+    }
+
+    for i in 0..stacks {
+        for j in 0..slices {
+            let top_left = i * (slices + 1) + j;
+            let top_right = top_left + 1;
+            let bottom_left = top_left + (slices + 1);
+            let bottom_right = bottom_left + 1;
+
+            indices.push(top_left);
+            indices.push(bottom_left);
+            indices.push(top_right);
+            indices.push(top_right);
+            indices.push(bottom_left);
+            indices.push(bottom_right);
+        }
+    }
+
+    (vertices, indices)
+}
+
 // !struct
 pub struct NreModel {
     pub vertex_buffer: vk::Buffer,
@@ -161,6 +261,14 @@ pub struct NreModel {
     pub index_buffer: Option<vk::Buffer>,
     pub index_buffer_memory: Option<vk::DeviceMemory>,
     pub index_count: u32,
+    pub bond_vertex_buffer: Option<vk::Buffer>,
+    pub bond_vertex_buffer_memory: Option<vk::DeviceMemory>,
+    pub bond_index_buffer: Option<vk::Buffer>,
+    pub bond_index_buffer_memory: Option<vk::DeviceMemory>,
+    pub bond_index_count: u32,
+    pub bond_instance_buffer: Option<vk::Buffer>,
+    pub bond_instance_buffer_memory: Option<vk::DeviceMemory>,
+    pub bond_instance_count: u32,
     device: ash::Device,
 }
 
@@ -179,6 +287,14 @@ impl NreModel {
             index_buffer: None,
             index_buffer_memory: None,
             index_count: 0,
+            bond_vertex_buffer: None,
+            bond_vertex_buffer_memory: None,
+            bond_index_buffer: None,
+            bond_index_buffer_memory: None,
+            bond_index_count: 0,
+            bond_instance_buffer: None,
+            bond_instance_buffer_memory: None,
+            bond_instance_count: 0,
         }
     }
 
@@ -399,6 +515,9 @@ impl NreModel {
             let n = atoms.len() as f32;
             [sum[0] / n, sum[1] / n, sum[2] / n]
         };
+
+        let bonds = infer_bonds(&atoms);
+
         MoleculeData {
             atoms,
             bonds,
@@ -465,8 +584,77 @@ impl NreModel {
             index_buffer: Some(index_buffer),
             index_buffer_memory: Some(index_buffer_memory),
             index_count: sphere_indices.len() as u32,
+            bond_vertex_buffer: None,
+            bond_vertex_buffer_memory: None,
+            bond_index_buffer: None,
+            bond_index_buffer_memory: None,
+            bond_index_count: 0,
+            bond_instance_buffer: None,
+            bond_instance_buffer_memory: None,
+            bond_instance_count: 0,
             device: device.device().clone(),
         }
+    }
+
+    pub fn upload_bonds(&mut self, device: &NreDevice, molecule: &MoleculeData) {
+        let (cyl_vertices, cyl_indices) = generate_cylinder(8, 16);
+        let (bvb, bvbm) = Self::create_vertex_buffer(device, &cyl_vertices);
+        let (bib, bibm) = Self::create_index_buffer(device, &cyl_indices);
+
+        let instances: Vec<BondInstance> = molecule
+            .bonds
+            .iter()
+            .map(|bond| {
+                let a = &molecule.atoms[bond.atom_a];
+                let b = &molecule.atoms[bond.atom_b];
+                let color = [
+                    (a.color[0] + b.color[0]) * 0.5,
+                    (a.color[1] + b.color[1]) * 0.5,
+                    (a.color[2] + b.color[2]) * 0.5,
+                ];
+                BondInstance {
+                    start: a.position,
+                    end: b.position,
+                    color,
+                }
+            })
+            .collect();
+
+        let size = (std::mem::size_of::<BondInstance>() * instances.len()) as u64;
+        let buffer_info = vk::BufferCreateInfo {
+            size,
+            usage: vk::BufferUsageFlags::VERTEX_BUFFER,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        let buf = unsafe { device.device().create_buffer(&buffer_info, None).unwrap() };
+        let mem_req = unsafe { device.device().get_buffer_memory_requirements(buf) };
+        let alloc_info = vk::MemoryAllocateInfo {
+            allocation_size: mem_req.size,
+            memory_type_index: Self::find_memory_type(device, mem_req.memory_type_bits),
+            ..Default::default()
+        };
+        let mem = unsafe { device.device().allocate_memory(&alloc_info, None).unwrap() };
+        unsafe { device.device().bind_buffer_memory(buf, mem, 0).unwrap() };
+        let data_ptr = unsafe {
+            device
+                .device()
+                .map_memory(mem, 0, size, vk::MemoryMapFlags::empty())
+                .unwrap()
+        } as *mut BondInstance;
+        unsafe {
+            std::ptr::copy_nonoverlapping(instances.as_ptr(), data_ptr, instances.len());
+            device.device().unmap_memory(mem);
+        }
+
+        self.bond_vertex_buffer = Some(bvb);
+        self.bond_vertex_buffer_memory = Some(bvbm);
+        self.bond_index_buffer = Some(bib);
+        self.bond_index_buffer_memory = Some(bibm);
+        self.bond_index_count = cyl_indices.len() as u32;
+        self.bond_instance_buffer = Some(buf);
+        self.bond_instance_buffer_memory = Some(mem);
+        self.bond_instance_count = instances.len() as u32;
     }
 }
 
@@ -488,6 +676,24 @@ impl Drop for NreModel {
                 self.device.destroy_buffer(buf, None);
             }
             if let Some(mem) = self.index_buffer_memory {
+                self.device.free_memory(mem, None);
+            }
+            if let Some(buf) = self.bond_vertex_buffer {
+                self.device.destroy_buffer(buf, None);
+            }
+            if let Some(mem) = self.bond_vertex_buffer_memory {
+                self.device.free_memory(mem, None);
+            }
+            if let Some(buf) = self.bond_index_buffer {
+                self.device.destroy_buffer(buf, None);
+            }
+            if let Some(mem) = self.bond_index_buffer_memory {
+                self.device.free_memory(mem, None);
+            }
+            if let Some(buf) = self.bond_instance_buffer {
+                self.device.destroy_buffer(buf, None);
+            }
+            if let Some(mem) = self.bond_instance_buffer_memory {
                 self.device.free_memory(mem, None);
             }
         }

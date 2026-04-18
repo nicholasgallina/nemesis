@@ -29,6 +29,7 @@ pub struct FirstApp {
     keys: std::collections::HashSet<winit::keyboard::KeyCode>,
     molecule_model: Option<NreModel>,
     molecule_pipeline: Option<NrePipeline>,
+    bond_pipeline: Option<NrePipeline>,
 }
 
 impl FirstApp {
@@ -56,12 +57,21 @@ impl FirstApp {
         let game_objects = vec![obj1];
 
         let molecule_data = NreModel::from_pdb("models/molecule.pdb");
-        let molecule_model = NreModel::from_molecule(&nre_device, &molecule_data);
+        let mut molecule_model = NreModel::from_molecule(&nre_device, &molecule_data);
+        molecule_model.upload_bonds(&nre_device, &molecule_data);
+
+        let bond_pipeline = NrePipeline::new_bond(
+            &nre_device,
+            nre_renderer.render_pass(),
+            descriptor_set_layout.layout(),
+        );
+
         let molecule_pipeline = NrePipeline::new_molecular(
             &nre_device,
             nre_renderer.render_pass(),
             descriptor_set_layout.layout(),
         );
+
         let start_time = std::time::Instant::now();
 
         for i in 0..2 {
@@ -83,7 +93,10 @@ impl FirstApp {
 
         let mut camera =
             crate::nre_camera::PerspectiveCamera::new(800.0 / 600.0, f32::to_radians(45.0));
-        camera.world_position = glam::Vec3::new(0.0, 0.0, -3.0);
+        let center = glam::Vec3::from(molecule_data.center_of_mass) * 0.05;
+        camera.world_position = glam::Vec3::new(center.x - 0.5, center.y + 0.3, center.z - 5.0);
+        camera.yaw = std::f32::consts::FRAC_2_PI + 0.9;
+        camera.pitch = 0.0;
         let controller = crate::nre_controller::Controller::new();
         let keys = std::collections::HashSet::new();
 
@@ -102,6 +115,7 @@ impl FirstApp {
             keys,
             molecule_model: Some(molecule_model),
             molecule_pipeline: Some(molecule_pipeline),
+            bond_pipeline: Some(bond_pipeline),
         }
     }
 
@@ -109,14 +123,12 @@ impl FirstApp {
         let event_loop = self.nre_window.event_loop;
         event_loop
             .run(move |event, elwt| match event {
-                // !event: close window
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     ..
                 } => {
                     elwt.exit();
                 }
-                // !
                 Event::WindowEvent {
                     event: WindowEvent::KeyboardInput { event, .. },
                     ..
@@ -134,7 +146,6 @@ impl FirstApp {
                     event: WindowEvent::RedrawRequested,
                     ..
                 } => {
-                    // check for stale swapchain first
                     if self.nre_renderer.needs_resize() {
                         let size = self.nre_window.window.inner_size();
                         let new_extent = vk::Extent2D {
@@ -156,8 +167,8 @@ impl FirstApp {
                         self.controller.update(dt, &self.keys, &mut self.camera);
                         let view = self.camera.view_matrix();
                         let proj = self.camera.projection_matrix();
-
                         let frame = self.nre_renderer.current_frame_index();
+
                         unsafe {
                             self.nre_device.device().cmd_bind_pipeline(
                                 cmd,
@@ -208,6 +219,58 @@ impl FirstApp {
                                 );
                             }
 
+                            // bonds first
+                            if let (Some(mol_model), Some(b_pipeline)) =
+                                (&self.molecule_model, &self.bond_pipeline)
+                            {
+                                if let (Some(bvb), Some(bib), Some(biib)) = (
+                                    mol_model.bond_vertex_buffer,
+                                    mol_model.bond_index_buffer,
+                                    mol_model.bond_instance_buffer,
+                                ) {
+                                    self.nre_device.device().cmd_bind_descriptor_sets(
+                                        cmd,
+                                        vk::PipelineBindPoint::GRAPHICS,
+                                        b_pipeline.pipeline_layout(),
+                                        0,
+                                        &[self.descriptor_sets[frame]],
+                                        &[],
+                                    );
+                                    self.nre_device.device().cmd_bind_pipeline(
+                                        cmd,
+                                        vk::PipelineBindPoint::GRAPHICS,
+                                        b_pipeline.pipeline(),
+                                    );
+                                    self.nre_device.device().cmd_bind_vertex_buffers(
+                                        cmd,
+                                        0,
+                                        &[bvb],
+                                        &[0],
+                                    );
+                                    self.nre_device.device().cmd_bind_vertex_buffers(
+                                        cmd,
+                                        2,
+                                        &[biib],
+                                        &[0],
+                                    );
+                                    self.nre_device.device().cmd_bind_index_buffer(
+                                        cmd,
+                                        bib,
+                                        0,
+                                        vk::IndexType::UINT32,
+                                    );
+                                    self.nre_device.device().cmd_draw_indexed(
+                                        cmd,
+                                        mol_model.bond_index_count,
+                                        mol_model.bond_instance_count,
+                                        0,
+                                        0,
+                                        0,
+                                    );
+                                }
+                            }
+
+                            // atoms on top
                             if let (Some(mol_model), Some(mol_pipeline)) =
                                 (&self.molecule_model, &self.molecule_pipeline)
                             {
@@ -251,7 +314,6 @@ impl FirstApp {
                 Event::AboutToWait => {
                     self.nre_window.window.request_redraw();
                 }
-                // !event: window resize
                 Event::WindowEvent {
                     event: WindowEvent::Resized(size),
                     ..

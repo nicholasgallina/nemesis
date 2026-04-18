@@ -6,6 +6,8 @@ fn main() {
         ("shaders/simple.frag", "shaders/simple.frag.spv"),
         ("shaders/atom.vert", "shaders/atom.vert.spv"),
         ("shaders/atom.frag", "shaders/atom.frag.spv"),
+        ("shaders/bond.vert", "shaders/bond.vert.spv"),
+        ("shaders/bond.frag", "shaders/bond.frag.spv"),
     ];
 
     for (src, out) in &shaders {

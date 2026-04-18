@@ -19,7 +19,7 @@ layout(location = 2) out vec3 fragWorldPos;
 
 void main() {
     float worldScale = 0.05;
-    float radiusScale = 0.06;
+    float radiusScale = 0.015;
     vec3 worldPos = atomPos * worldScale;
     vec3 sphereVertex = inPosition * (atomRadius * radiusScale);
     gl_Position = ubo.vp * vec4(sphereVertex + worldPos, 1.0);

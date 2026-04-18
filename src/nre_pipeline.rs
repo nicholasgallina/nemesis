@@ -1,6 +1,6 @@
 use crate::first_app::PushConstantData;
 use crate::nre_device::NreDevice;
-use crate::nre_model::{AtomInstance, Vertex};
+use crate::nre_model::{AtomInstance, BondInstance, Vertex};
 use ash::vk::{self, RenderPass};
 use std::ffi::CString;
 
@@ -237,6 +237,36 @@ impl NrePipeline {
             ..Default::default()
         };
         unsafe { device.create_shader_module(&create_info, None).unwrap() }
+    }
+
+    pub fn new_bond(
+        device: &NreDevice,
+        render_pass: vk::RenderPass,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+    ) -> Self {
+        let pipeline_layout = Self::create_pipeline_layout(device.device(), descriptor_set_layout);
+
+        let mut binding_descriptions = Vertex::get_binding_descriptions();
+        binding_descriptions.extend(BondInstance::get_binding_descriptions());
+
+        let mut attribute_descriptions = Vertex::get_attribute_descriptions();
+        attribute_descriptions.extend(BondInstance::get_attribute_descriptions());
+
+        let pipeline = Self::create_pipeline(
+            device.device(),
+            render_pass,
+            pipeline_layout,
+            "shaders/bond.vert.spv",
+            "shaders/bond.frag.spv",
+            &binding_descriptions,
+            &attribute_descriptions,
+        );
+
+        Self {
+            pipeline,
+            pipeline_layout,
+            device: device.device().clone(),
+        }
     }
 }
 
