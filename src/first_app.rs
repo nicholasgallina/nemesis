@@ -2,6 +2,7 @@ use crate::nre_camera::Camera;
 use crate::nre_descriptor::{NreDescriptorPool, NreDescriptorSetLayout, NreUniformBuffer};
 use crate::nre_device::NreDevice;
 use crate::nre_game_object::NreGameObject;
+use crate::nre_model::MoleculeObject;
 use crate::nre_model::NreModel;
 use crate::nre_pipeline::NrePipeline;
 use crate::nre_renderer::NreRenderer;
@@ -12,6 +13,7 @@ use winit::event::{Event, WindowEvent};
 
 pub struct PushConstantData {
     transform: glam::Mat4,
+    transition_t: f32,
 }
 
 pub struct FirstApp {
@@ -27,12 +29,14 @@ pub struct FirstApp {
     camera: crate::nre_camera::PerspectiveCamera,
     controller: crate::nre_controller::Controller,
     keys: std::collections::HashSet<winit::keyboard::KeyCode>,
-    molecule_model: Option<NreModel>,
+    molecule: Option<MoleculeObject>,
     molecule_pipeline: Option<NrePipeline>,
     bond_pipeline: Option<NrePipeline>,
 }
 
+// !impl
 impl FirstApp {
+    // !func () -> app instance
     pub fn new() -> Self {
         let nre_window = NreWindow::new(800, 600, "Nemesis Rendering Engine");
         let nre_device = NreDevice::new(&nre_window.window);
@@ -57,8 +61,7 @@ impl FirstApp {
         let game_objects = vec![obj1];
 
         let molecule_data = NreModel::from_pdb("models/molecule.pdb");
-        let mut molecule_model = NreModel::from_molecule(&nre_device, &molecule_data);
-        molecule_model.upload_bonds(&nre_device, &molecule_data);
+        let molecule = MoleculeObject::new(&nre_device, molecule_data);
 
         let bond_pipeline = NrePipeline::new_bond(
             &nre_device,
@@ -93,13 +96,14 @@ impl FirstApp {
 
         let mut camera =
             crate::nre_camera::PerspectiveCamera::new(800.0 / 600.0, f32::to_radians(45.0));
-        let center = glam::Vec3::from(molecule_data.center_of_mass) * 0.05;
+        let center = glam::Vec3::from(molecule.data.center_of_mass) * 0.05;
         camera.world_position = glam::Vec3::new(center.x - 0.5, center.y + 0.3, center.z - 5.0);
         camera.yaw = std::f32::consts::FRAC_2_PI + 0.9;
         camera.pitch = 0.0;
         let controller = crate::nre_controller::Controller::new();
         let keys = std::collections::HashSet::new();
 
+        // !return
         Self {
             nre_window,
             nre_device,
@@ -113,7 +117,7 @@ impl FirstApp {
             camera,
             controller,
             keys,
-            molecule_model: Some(molecule_model),
+            molecule: Some(molecule),
             molecule_pipeline: Some(molecule_pipeline),
             bond_pipeline: Some(bond_pipeline),
         }
@@ -192,6 +196,7 @@ impl FirstApp {
                                 let model_mat = obj.transform();
                                 let push_data = PushConstantData {
                                     transform: model_mat,
+                                    transition_t: 0.0,
                                 };
                                 let push_bytes = std::slice::from_raw_parts(
                                     &push_data as *const PushConstantData as *const u8,
@@ -219,10 +224,29 @@ impl FirstApp {
                                 );
                             }
 
+                            let push_data = PushConstantData {
+                                transform: glam::Mat4::IDENTITY,
+                                transition_t: self.controller.transition_t,
+                            };
+
+                            let push_bytes = std::slice::from_raw_parts(
+                                &push_data as *const PushConstantData as *const u8,
+                                std::mem::size_of::<PushConstantData>(),
+                            );
+
+                            self.nre_device.device().cmd_push_constants(
+                                cmd,
+                                self.nre_renderer.pipeline_layout(),
+                                vk::ShaderStageFlags::VERTEX,
+                                0,
+                                push_bytes,
+                            );
+
                             // bonds first
-                            if let (Some(mol_model), Some(b_pipeline)) =
-                                (&self.molecule_model, &self.bond_pipeline)
+                            if let (Some(mol_obj), Some(b_pipeline)) =
+                                (&self.molecule, &self.bond_pipeline)
                             {
+                                let mol_model = &mol_obj.views[mol_obj.current_view].model;
                                 if let (Some(bvb), Some(bib), Some(biib)) = (
                                     mol_model.bond_vertex_buffer,
                                     mol_model.bond_index_buffer,
@@ -271,9 +295,10 @@ impl FirstApp {
                             }
 
                             // atoms on top
-                            if let (Some(mol_model), Some(mol_pipeline)) =
-                                (&self.molecule_model, &self.molecule_pipeline)
+                            if let (Some(mol_obj), Some(mol_pipeline)) =
+                                (&self.molecule, &self.molecule_pipeline)
                             {
+                                let mol_model = &mol_obj.views[mol_obj.current_view].model;
                                 self.nre_device.device().cmd_bind_pipeline(
                                     cmd,
                                     vk::PipelineBindPoint::GRAPHICS,
@@ -306,11 +331,11 @@ impl FirstApp {
                                     0,
                                 );
                             }
-                        }
+                        } // closes unsafe
                         self.nre_renderer.end_render_pass(cmd, &self.nre_device);
                         self.nre_renderer.end_frame(&self.nre_device);
-                    }
-                }
+                    } // closes if let Some(cmd)
+                } // closes RedrawRequested
                 Event::AboutToWait => {
                     self.nre_window.window.request_redraw();
                 }

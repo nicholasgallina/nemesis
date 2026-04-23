@@ -699,3 +699,45 @@ impl Drop for NreModel {
         }
     }
 }
+
+// !enum
+pub enum RepresentationKind {
+    BallAndStick,
+    SpaceFill,
+}
+
+// !struct
+pub struct MoleculeView {
+    pub kind: RepresentationKind,
+    pub model: NreModel,
+}
+
+// !struct
+pub struct MoleculeObject {
+    pub data: MoleculeData,
+    pub views: Vec<MoleculeView>,
+    pub current_view: usize,
+    pub transition_t: f32,
+}
+
+// !impl
+impl MoleculeObject {
+    // !func () -> molecule object
+    pub fn new(device: &NreDevice, data: MoleculeData) -> Self {
+        let mut model = NreModel::from_molecule(device, &data);
+        model.upload_bonds(device, &data);
+
+        // the decoupling of model and view.
+        let views = vec![MoleculeView {
+            kind: RepresentationKind::BallAndStick,
+            model,
+        }];
+
+        Self {
+            data,
+            views,
+            current_view: 0,
+            transition_t: 0.0,
+        }
+    }
+}
