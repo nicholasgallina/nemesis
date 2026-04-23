@@ -1,6 +1,7 @@
 use crate::nre_camera::Camera;
 use crate::nre_descriptor::{NreDescriptorPool, NreDescriptorSetLayout, NreUniformBuffer};
 use crate::nre_device::NreDevice;
+use crate::nre_file::AppCommand;
 use crate::nre_game_object::NreGameObject;
 use crate::nre_model::MoleculeObject;
 use crate::nre_model::NreModel;
@@ -32,6 +33,9 @@ pub struct FirstApp {
     molecule: Option<MoleculeObject>,
     molecule_pipeline: Option<NrePipeline>,
     bond_pipeline: Option<NrePipeline>,
+    cmd_rx: std::sync::mpsc::Receiver<AppCommand>,
+    cmd_tx: std::sync::mpsc::Sender<AppCommand>,
+    modifiers: winit::event::Modifiers,
 }
 
 // !impl
@@ -94,6 +98,10 @@ impl FirstApp {
             unsafe { nre_device.device().update_descriptor_sets(&[write], &[]) };
         }
 
+        // !block - channel creation
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<AppCommand>();
+        let modifiers = winit::event::Modifiers::default();
+
         let mut camera =
             crate::nre_camera::PerspectiveCamera::new(800.0 / 600.0, f32::to_radians(45.0));
         let center = glam::Vec3::from(molecule.data.center_of_mass) * 0.05;
@@ -120,6 +128,9 @@ impl FirstApp {
             molecule: Some(molecule),
             molecule_pipeline: Some(molecule_pipeline),
             bond_pipeline: Some(bond_pipeline),
+            cmd_rx,
+            cmd_tx,
+            modifiers,
         }
     }
 
@@ -143,6 +154,29 @@ impl FirstApp {
                             self.keys.insert(code);
                         } else {
                             self.keys.remove(&code);
+                        }
+                    }
+
+                    // /!cmd : Cmd + O / Ctrl + O
+                    if event.state == winit::event::ElementState::Pressed {
+                        use winit::keyboard::KeyCode;
+                        if let PhysicalKey::Code(KeyCode::KeyO) = event.physical_key {
+                            #[cfg(target_os = "macos")]
+                            let modifier = self.modifiers.state().super_key();
+                            #[cfg(not(target_os = "macos"))]
+                            let modifier = self.modifiers.state().control_key();
+
+                            if modifier {
+                                let tx = self.cmd_tx.clone();
+                                std::thread::spawn(move || {
+                                    if let Some(path) = rfd::FileDialog::new()
+                                        .add_filter("Protein Data Bank (PDB)", &["pdb"])
+                                        .pick_file()
+                                    {
+                                        tx.send(AppCommand::LoadMolecule(path)).ok();
+                                    }
+                                });
+                            }
                         }
                     }
                 }
@@ -169,6 +203,22 @@ impl FirstApp {
 
                         let dt = 1.0 / 60.0;
                         self.controller.update(dt, &self.keys, &mut self.camera);
+
+                        // drain command queue
+                        while let Ok(cmd) = self.cmd_rx.try_recv() {
+                            match cmd {
+                                AppCommand::LoadMolecule(path) => {
+                                    let path_str = path.to_str().unwrap();
+                                    let molecule_data = NreModel::from_pdb(path_str);
+                                    let new_molecule =
+                                        MoleculeObject::new(&self.nre_device, molecule_data);
+                                    self.molecule = Some(new_molecule);
+                                    self.controller.transition_t = 0.0;
+                                    self.controller.transition_dir = 0.0;
+                                }
+                            }
+                        }
+
                         let view = self.camera.view_matrix();
                         let proj = self.camera.projection_matrix();
                         let frame = self.nre_renderer.current_frame_index();
@@ -353,6 +403,13 @@ impl FirstApp {
                         self.descriptor_set_layout.layout(),
                     );
                     self.camera.aspect_ratio = size.width as f32 / size.height as f32;
+                }
+                // modifiers changed event arm
+                Event::WindowEvent {
+                    event: WindowEvent::ModifiersChanged(mods),
+                    ..
+                } => {
+                    self.modifiers = mods;
                 }
                 _ => {}
             })

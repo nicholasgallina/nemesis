@@ -3,6 +3,7 @@ mod nre_camera;
 mod nre_controller;
 mod nre_descriptor;
 mod nre_device;
+mod nre_file;
 mod nre_game_object;
 mod nre_model;
 mod nre_pipeline;
