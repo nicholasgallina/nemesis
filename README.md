@@ -3,7 +3,7 @@
 # Nemesis Molecular Visualization Engine
 
 <p align="center">
-    <img src="media/mog.png" width="200">
+    <img src="media/mog.png" width="800">
 </p>
 
 Nemesis is a real-time molecular visualization engine built in Rust and Vulkan. It renders PDB protein structures via custom parser feeding GPU instance buffers with per-atom position, radius, and element data; originally built to visualize MOGAD-relevant proteins.
